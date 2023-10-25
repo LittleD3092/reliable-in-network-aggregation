@@ -17,8 +17,8 @@ class MyTopo(Topo):
         h3 = self.addHost('h3', ip = '10.0.2.1')
 
         # Add switches
-        s1 = self.addSwitch('s1', cls = OVSSwitch)
-        s2 = self.addSwitch('s2', cls = OVSSwitch)
+        s1 = self.addSwitch('s1', cls = OVSSwitch, datapath = 'p4')
+        s2 = self.addSwitch('s2', cls = OVSSwitch, datapath = 'p4')
 
         # Add links
         self.addLink(h1, s1, bw = 10)
