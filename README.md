@@ -14,7 +14,7 @@ The topology is shown in the figure below.
 graph LR
     h1["host 1: 10.0.1.1"]
     h2["host 2: 10.0.1.2"]
-    h3["host 3: 10.0.2.1"]
+    h3["host 3: 10.0.1.3"]
     s1(("switch 1"))
     
     h1 --- s1
