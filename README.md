@@ -16,12 +16,10 @@ graph LR
     h2["host 2: 10.0.1.2"]
     h3["host 3: 10.0.2.1"]
     s1(("switch 1"))
-    s2(("switch 2"))
     
     h1 --- s1
     h2 --- s1
-    s1 --- s2
-    s2 --- h3
+    s1 --- h3
 ```
 
 ## 3. Implementation
