@@ -31,7 +31,7 @@ TODO
 The project is executed using Makefile. To start the project, run the following command.
 
 ```bash
-make start
+make
 ```
 
 A mininet console will be created, and you may exit it using `exit` command. To clean the project, run the following command.

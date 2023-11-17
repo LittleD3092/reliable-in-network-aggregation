@@ -1,10 +1,10 @@
-// TODO: Make sure this works.
-
 /* -*- P4_16 -*- */
 #include <core.p4>
 #include <v1model.p4>
 
+const bit<16> TYPE_MYTUNNEL = 0x1212;
 const bit<16> TYPE_IPV4 = 0x800;
+const bit<32> MAX_TUNNEL_ID = 1 << 16;
 
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
@@ -18,6 +18,11 @@ header ethernet_t {
     macAddr_t dstAddr;
     macAddr_t srcAddr;
     bit<16>   etherType;
+}
+
+header myTunnel_t {
+    bit<16> proto_id;
+    bit<16> dst_id;
 }
 
 header ipv4_t {
@@ -41,6 +46,7 @@ struct metadata {
 
 struct headers {
     ethernet_t   ethernet;
+    myTunnel_t   myTunnel;
     ipv4_t       ipv4;
 }
 
@@ -54,15 +60,23 @@ parser MyParser(packet_in packet,
                 inout standard_metadata_t standard_metadata) {
 
     state start {
-        /* TODO: add parser logic */
         transition parse_ethernet;
     }
 
     state parse_ethernet {
         packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
+            TYPE_MYTUNNEL: parse_myTunnel;
             TYPE_IPV4: parse_ipv4;
-            default:   accept;
+            default: accept;
+        }
+    }
+
+    state parse_myTunnel {
+        packet.extract(hdr.myTunnel);
+        transition select(hdr.myTunnel.proto_id) {
+            TYPE_IPV4: parse_ipv4;
+            default: accept;
         }
     }
 
@@ -70,8 +84,8 @@ parser MyParser(packet_in packet,
         packet.extract(hdr.ipv4);
         transition accept;
     }
-}
 
+}
 
 /*************************************************************************
 ************   C H E C K S U M    V E R I F I C A T I O N   *************
@@ -89,26 +103,39 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+
+    counter(MAX_TUNNEL_ID, CounterType.packets_and_bytes) ingressTunnelCounter;
+    counter(MAX_TUNNEL_ID, CounterType.packets_and_bytes) egressTunnelCounter;
+
     action drop() {
         mark_to_drop(standard_metadata);
     }
 
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
-        /* TODO: fill out code in action body */
-        
-        // 1. sets the egress port for the next hop
         standard_metadata.egress_spec = port;
-
-        // 2. updates source address with the address 
-        //    of the switch
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-
-        // 3. updates the ethernet destination address
-        //    with the address of the next hop
         hdr.ethernet.dstAddr = dstAddr;
-
-        // 4. decrements the ttl
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+    }
+
+    action myTunnel_ingress(bit<16> dst_id) {
+        hdr.myTunnel.setValid();
+        hdr.myTunnel.dst_id = dst_id;
+        hdr.myTunnel.proto_id = hdr.ethernet.etherType;
+        hdr.ethernet.etherType = TYPE_MYTUNNEL;
+        ingressTunnelCounter.count((bit<32>) hdr.myTunnel.dst_id);
+    }
+
+    action myTunnel_forward(egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+    }
+
+    action myTunnel_egress(macAddr_t dstAddr, egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+        hdr.ethernet.dstAddr = dstAddr;
+        hdr.ethernet.etherType = hdr.myTunnel.proto_id;
+        hdr.myTunnel.setInvalid();
+        egressTunnelCounter.count((bit<32>) hdr.myTunnel.dst_id);
     }
 
     table ipv4_lpm {
@@ -117,6 +144,7 @@ control MyIngress(inout headers hdr,
         }
         actions = {
             ipv4_forward;
+            myTunnel_ingress;
             drop;
             NoAction;
         }
@@ -124,12 +152,28 @@ control MyIngress(inout headers hdr,
         default_action = NoAction();
     }
 
+    table myTunnel_exact {
+        key = {
+            hdr.myTunnel.dst_id: exact;
+        }
+        actions = {
+            myTunnel_forward;
+            myTunnel_egress;
+            drop;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
     apply {
-        /* TODO: fix ingress control logic
-         *  - ipv4_lpm should be applied only when IPv4 header is valid
-         */
-        if (hdr.ipv4.isValid()) {
+        if (hdr.ipv4.isValid() && !hdr.myTunnel.isValid()) {
+            // Process only non-tunneled IPv4 packets.
             ipv4_lpm.apply();
+        }
+
+        if (hdr.myTunnel.isValid()) {
+            // Process all tunneled packets.
+            myTunnel_exact.apply();
         }
     }
 }
@@ -148,7 +192,7 @@ control MyEgress(inout headers hdr,
 *************   C H E C K S U M    C O M P U T A T I O N   **************
 *************************************************************************/
 
-control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
      apply {
         update_checksum(
             hdr.ipv4.isValid(),
@@ -168,15 +212,14 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
     }
 }
 
-
 /*************************************************************************
 ***********************  D E P A R S E R  *******************************
 *************************************************************************/
 
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
-        /* TODO: add deparser logic */
         packet.emit(hdr.ethernet);
+        packet.emit(hdr.myTunnel);
         packet.emit(hdr.ipv4);
     }
 }
