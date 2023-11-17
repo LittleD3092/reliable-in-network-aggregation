@@ -1,0 +1,6 @@
+Calling target program-options parser
+[14:39:31.630] [bmv2] [D] [thread 10929] Set default default entry for table 'MyIngress.ipv4_lpm': NoAction - 
+[14:39:31.631] [bmv2] [D] [thread 10929] Set default default entry for table 'MyIngress.myTunnel_exact': MyIngress.drop - 
+Server listening on 0.0.0.0:50053
+[14:39:31.632] [bmv2] [I] [thread 10929] Starting Thrift server on port 9092
+[14:39:31.632] [bmv2] [I] [thread 10929] Thrift server was started
