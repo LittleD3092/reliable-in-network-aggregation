@@ -39,6 +39,7 @@ const bit<8>  ADDER_VERSION_MINOR = 0x01;
 
 // the address of host 3
 const bit<48> ADDER_DST_ADDR      = 0x080000000103;
+const bit<9>  ADDER_DST_PORT      = 3;
 
 header adder_t {
     bit<8>  a;
@@ -113,11 +114,13 @@ control MyVerifyChecksum(inout headers hdr,
  **************  I N G R E S S   P R O C E S S I N G   *******************
  *************************************************************************/
 
-register<bit<32>>(256) num_buffer;
-register<bit<1>> (256) num_buffer_valid;
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+
+    register<bit<32>>(256) num_buffer;
+    register<bit<1>> (256) num_buffer_valid;
+
     action send_dest(bit<32> result, bit<8> seq_num) {
         // save the result in header
         hdr.adder.num = result;
@@ -127,6 +130,7 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = ADDER_DST_ADDR;
         hdr.ethernet.etherType = ADDER_ETYPE;
+        standard_metadata.egress_spec = ADDER_DST_PORT;
     }
     action save_num(bit<32> index, bit<32> num) {
         num_buffer.write(index, num);
@@ -136,34 +140,7 @@ control MyIngress(inout headers hdr,
         num_buffer.write(index, 0);
         num_buffer_valid.write(index, 0);
     }
-    action lookup_num() {
-        // read the number from the register
-        bit<32> num;
-        bit<1>  valid;
-        num_buffer.read(num, hdr.adder.num);
-        bit<24> padding = 0x0;
-        bit<32> index = padding ++ hdr.adder.seq_num;
-        num_buffer_valid.read(valid, index);
 
-        // based on valid, determine what to do:
-        // 1. if valid == 0, then the register is empty, so we need to
-        //    buffer the number and wait for the next packet
-        // 2. if valid == 1, then the register is full, so we can
-        //    proceed with the calculation\
-        bit<1> write_valid;
-        bit<32> write_num;
-        if (valid == 0) {
-            // buffer the number
-            save_num(index, num);
-        } else {
-            // calculate the result
-            bit<32> result = num + hdr.adder.num;
-            // send the result back
-            send_dest(result, hdr.adder.seq_num);
-            // clear the register
-            delete_num(index);
-        }
-    }
     action operation_drop() {
         // drop the packet
         mark_to_drop(standard_metadata);
@@ -171,7 +148,32 @@ control MyIngress(inout headers hdr,
 
     apply {
         if (hdr.adder.isValid()) {
-            lookup_num();
+            // read the number from the register
+            bit<32> num;
+            bit<1>  valid;
+            bit<24> padding = 0x0;
+            bit<32> index = padding ++ hdr.adder.seq_num;
+            num_buffer.read(num, index);
+            num_buffer_valid.read(valid, index);
+
+            // based on valid, determine what to do:
+            // 1. if valid == 0, then the register is empty, so we need to
+            //    buffer the number and wait for the next packet
+            // 2. if valid == 1, then the register is full, so we can
+            //    proceed with the calculation\
+            bit<1> write_valid;
+            bit<32> write_num;
+            if (valid == 0) {
+                // buffer the number
+                save_num(index, hdr.adder.num);
+            } else {
+                // calculate the result
+                bit<32> result = num + hdr.adder.num;
+                // send the result back
+                send_dest(result, hdr.adder.seq_num);
+                // clear the register
+                delete_num(index);
+            }
         } else {
             operation_drop();
         }

@@ -38,7 +38,7 @@ class Token:
         self.value = value
 
 def receiver(pkt):
-    print("number:", pkt[Adder], "seq_num:", pkt[Adder].seq_num)
+    print("number:", pkt[Adder].num, "seq_num:", pkt[Adder].seq_num)
 
 def main():
     iface = 'eth0'
