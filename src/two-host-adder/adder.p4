@@ -49,7 +49,7 @@ const bit<9>  ADDER_DST_PORT      = 3;
 const bit<32> BUFFER_SIZE         = 256;
 
 // clone session id
-const bit<32> CLONE_SESSION_ID = 1;
+const bit<32> CLONE_SESSION_ID = 500;
 
 header adder_t {
     bit<8>  a;
@@ -158,6 +158,26 @@ control MyIngress(inout headers hdr,
         clone(CloneType.I2E, CLONE_SESSION_ID);
     }
 
+    action send_ack(bit<9> port) {
+        // send the ack back
+        // inform that the number is accepted and saved in buffer
+        hdr.adder.num = 0;
+        // hdr.adder.seq_num = seq_num; (remain the same)
+        bit<48> tmp = hdr.ethernet.srcAddr;
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = tmp;
+        hdr.ethernet.etherType = ADDER_ETYPE;
+        standard_metadata.egress_spec = port;
+    }
+
+    action send_result(bit<9> port) {
+        // forward the packet to the destination
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = ADDER_DST_ADDR;
+        hdr.ethernet.etherType = ADDER_ETYPE;
+        standard_metadata.egress_spec = port;
+    }
+
     apply {
         if (hdr.adder.isValid()) {
             // read the number from the register
@@ -180,6 +200,8 @@ control MyIngress(inout headers hdr,
             if (valid == 0) { // the register is empty
                 // save the number in the register
                 save_num(index, hdr.adder.num, srcPort);
+                // send the ack back
+                send_ack(srcPort);
             } 
             else if (valid == 1 && srcPort != author) { // the register is occupied by another host
                 // calculate the result
@@ -188,8 +210,20 @@ control MyIngress(inout headers hdr,
                 save_result(result, hdr.adder.seq_num);
                 // clear the register
                 delete_num(index);
+
+                // save a copy of the packet
+                bit<48> srcAddr = hdr.ethernet.srcAddr;
+                bit<48> dstAddr = hdr.ethernet.dstAddr;
+                // send the result back
+                send_result(ADDER_DST_PORT);
                 // clone the packet
                 clone_packet();
+                // reset the packet
+                hdr.ethernet.srcAddr = srcAddr;
+                hdr.ethernet.dstAddr = dstAddr;
+
+                // send the ack back
+                send_ack(srcPort);
             }
             else { // the register is occupied by the same host
                 // drop the packet
@@ -208,36 +242,9 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    action send_ack(bit<9> port) {
-        // send the ack back
-        // inform that the number is accepted and saved in buffer
-        hdr.adder.num = 0;
-        // hdr.adder.seq_num = seq_num; (remain the same)
-        bit<48> tmp = hdr.ethernet.srcAddr;
-        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-        hdr.ethernet.dstAddr = tmp;
-        hdr.ethernet.etherType = ADDER_ETYPE;
-        standard_metadata.egress_spec = port;
-    }
+    
 
-    action send_result(bit<9> port) {
-        // forward the packet to the destination
-        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-        hdr.ethernet.dstAddr = ADDER_DST_ADDR;
-        hdr.ethernet.etherType = ADDER_ETYPE;
-        standard_metadata.egress_spec = port;
-    }
-
-    apply {
-        if (standard_metadata.instance_type == CLONE_SESSION_ID) {
-            // send the result back
-            send_result(ADDER_DST_PORT);
-        }
-        else {
-            // send the ack back
-            send_ack(standard_metadata.ingress_port);
-        }
-    }
+    apply { }
 }
 
 /*************************************************************************
