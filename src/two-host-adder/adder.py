@@ -49,12 +49,27 @@ def main():
             num = int(input("Enter a number: "))
             seq = int(input("Enter a sequence number(0~255): "))
 
+            # send packet
             try:
                 pkt = Ether(dst='00:04:00:00:00:00', type=0x1234) / Adder(num=num, seq_num=seq)
                 pkt = pkt/' '
                 sendp(pkt, iface=iface, verbose=False)
             except Exception as error:
                 print(error)
+
+            # receive ack
+            try:
+                resp = srp1(pkt, iface=iface, timeout=1, verbose=False)
+                if resp:
+                    if resp[Adder]:
+                        print("ACK received, seq_num:", resp[Adder].seq_num)
+                    else:
+                        print("Cannot parse ACK")
+                else:
+                    print("ACK not received")
+            except Exception as error:
+                print(error)
+
     elif node_type == 'r':
         while True:
             try:
