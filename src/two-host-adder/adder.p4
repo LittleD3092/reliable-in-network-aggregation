@@ -51,6 +51,15 @@ const bit<32> BUFFER_SIZE         = 256;
 // clone session id
 const bit<32> CLONE_SESSION_ID = 500;
 
+// clone type
+#define PKT_INSTANCE_TYPE_NORMAL 0
+#define PKT_INSTANCE_TYPE_INGRESS_CLONE 1
+#define PKT_INSTANCE_TYPE_EGRESS_CLONE 2
+#define PKT_INSTANCE_TYPE_COALESCED 3
+#define PKT_INSTANCE_TYPE_INGRESS_RECIRC 4
+#define PKT_INSTANCE_TYPE_REPLICATION 5
+#define PKT_INSTANCE_TYPE_RESUBMIT 6
+
 header adder_t {
     bit<8>  a;
     bit<8>  d;
@@ -155,7 +164,7 @@ control MyIngress(inout headers hdr,
 
     action clone_packet() {
         // clone the packet
-        clone(CloneType.I2E, CLONE_SESSION_ID);
+        clone(CloneType.I2I, CLONE_SESSION_ID);
     }
 
     action send_ack(bit<9> port) {
@@ -180,54 +189,52 @@ control MyIngress(inout headers hdr,
 
     apply {
         if (hdr.adder.isValid()) {
-            // read the number from the register
-            bit<32> num;
-            bit<1>  valid;
-            bit<9>  author;
-            bit<32> index;
-            bit<32> base = 0;
-            bit<9>  srcPort = standard_metadata.ingress_port;
-            hash(index, HashAlgorithm.crc32, base, {hdr.adder.seq_num}, BUFFER_SIZE - 1);
-            num_buffer.read(num, index);
-            num_buffer_valid.read(valid, index);
-            num_buffer_author.read(author, index);
-
-            // based on valid, determine what to do:
-            // 1. if valid == 0, then the register is empty, so we need to
-            //    buffer the number and wait for the next packet
-            // 2. if valid == 1, then the register is full, so we can
-            //    proceed with the calculation
-            if (valid == 0) { // the register is empty
-                // save the number in the register
-                save_num(index, hdr.adder.num, srcPort);
+            // check clone
+            if (standard_metadata.instance_type == PKT_INSTANCE_TYPE_INGRESS_CLONE) {
                 // send the ack back
-                send_ack(srcPort);
-            } 
-            else if (valid == 1 && srcPort != author) { // the register is occupied by another host
-                // calculate the result
-                bit<32> result = num + hdr.adder.num;
-                // save the result in header
-                save_result(result, hdr.adder.seq_num);
-                // clear the register
-                delete_num(index);
-
-                // save a copy of the packet
-                bit<48> srcAddr = hdr.ethernet.srcAddr;
-                bit<48> dstAddr = hdr.ethernet.dstAddr;
-                // send the result back
-                send_result(ADDER_DST_PORT);
-                // clone the packet
-                clone_packet();
-                // reset the packet
-                hdr.ethernet.srcAddr = srcAddr;
-                hdr.ethernet.dstAddr = dstAddr;
-
-                // send the ack back
-                send_ack(srcPort);
+                send_ack(standard_metadata.ingress_port);
             }
-            else { // the register is occupied by the same host
-                // drop the packet
-                operation_drop();
+            else { // normal packet
+                // read the number from the register
+                bit<32> num;
+                bit<1>  valid;
+                bit<9>  author;
+                bit<32> index;
+                bit<32> base = 0;
+                bit<9>  srcPort = standard_metadata.ingress_port;
+                hash(index, HashAlgorithm.crc32, base, {hdr.adder.seq_num}, BUFFER_SIZE - 1);
+                num_buffer.read(num, index);
+                num_buffer_valid.read(valid, index);
+                num_buffer_author.read(author, index);
+
+                // based on valid, determine what to do:
+                // 1. if valid == 0, then the register is empty, so we need to
+                //    buffer the number and wait for the next packet
+                // 2. if valid == 1, then the register is full, so we can
+                //    proceed with the calculation
+                if (valid == 0) { // the register is empty
+                    clone_packet();
+
+                    // save the number in the register
+                    save_num(index, hdr.adder.num, srcPort);
+                    operation_drop();
+                }
+                else if (valid == 1 && srcPort != author) { // the register is occupied by another host
+                    clone_packet();
+
+                    // calculate the result
+                    bit<32> result = num + hdr.adder.num;
+                    // save the result in header
+                    save_result(result, hdr.adder.seq_num);
+                    // clear the register
+                    delete_num(index);
+                    // send the result back
+                    send_result(ADDER_DST_PORT);
+                }
+                else { // the register is occupied by the same host
+                    // drop the packet
+                    operation_drop();
+                }
             }
         } 
         else {
@@ -242,8 +249,6 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    
-
     apply { }
 }
 
