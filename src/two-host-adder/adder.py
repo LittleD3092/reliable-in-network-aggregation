@@ -22,6 +22,7 @@ class Adder(Packet):
                     XByteField("ver_maj", 0x00),
                     XByteField("ver_min", 0x01),
                     XByteField("seq_num", 0x00),
+                    XByteField("is_result", 0x00),
                     IntField("num", 0x00) ]
 
 bind_layers(Ether, Adder, type=0x1234)
@@ -49,12 +50,26 @@ def main():
             num = int(input("Enter a number: "))
             seq = int(input("Enter a sequence number(0~255): "))
 
+            # send and receive ack
             try:
                 pkt = Ether(dst='00:04:00:00:00:00', type=0x1234) / Adder(num=num, seq_num=seq)
                 pkt = pkt/' '
-                sendp(pkt, iface=iface, verbose=False)
+                resp = srp1(pkt, iface=iface, timeout=1, verbose=False)
+                if resp:
+                    if resp[Adder] and resp[Adder].is_result == 0x00:
+                        print("ACK received, number saved. seq_num:", resp[Adder].seq_num)
+                    elif resp[Adder] and resp[Adder].is_result == 0x01:
+                        print("ACK received, result added. seq_num:", resp[Adder].seq_num, "result:", resp[Adder].num)
+                        resultPkt = Ether(dst='00:04:00:00:00:00', type=0x1234) / Adder(num=resp[Adder].num, seq_num=resp[Adder].seq_num, is_result=0x01)
+                        resultPkt = resultPkt/' '
+                        sendp(resultPkt, iface=iface, verbose=False)
+                    else:
+                        print("Cannot parse ACK")
+                else:
+                    print("ACK not received")
             except Exception as error:
                 print(error)
+
     elif node_type == 'r':
         while True:
             try:
