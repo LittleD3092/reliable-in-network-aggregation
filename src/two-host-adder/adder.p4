@@ -5,7 +5,7 @@
 +---------------+---------------+---------------+---------------+
 |      'A'      |      'D'      | VERSION_MAJOR | VERSION_MINOR |
 +---------------+---------------+---------------+---------------+
-|    SEQ_NUM    |
+|    SEQ_NUM    |   IS_RESULT   |
 +---------------------------------------------------------------+
 |                              NUM                              |
 +---------------------------------------------------------------+
@@ -66,6 +66,7 @@ header adder_t {
     bit<8>  ver_maj;
     bit<8>  ver_min;
     bit<8>  seq_num;
+    bit<8>  is_result;
     bit<32> num;
 }
 
@@ -162,16 +163,11 @@ control MyIngress(inout headers hdr,
         mark_to_drop(standard_metadata);
     }
 
-    action clone_packet() {
-        // clone the packet
-        clone(CloneType.I2I, CLONE_SESSION_ID);
-    }
-
-    action send_ack(bit<9> port) {
+    action send_ack(bit<9> port, bit<8> is_result) {
         // send the ack back
-        // inform that the number is accepted and saved in buffer
-        hdr.adder.num = 0;
+        // hdr.adder.num = num; (remain the same)
         // hdr.adder.seq_num = seq_num; (remain the same)
+        hdr.adder.is_result = is_result;
         bit<48> tmp = hdr.ethernet.srcAddr;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = tmp;
@@ -189,12 +185,7 @@ control MyIngress(inout headers hdr,
 
     apply {
         if (hdr.adder.isValid()) {
-            // check clone
-            if (standard_metadata.instance_type == PKT_INSTANCE_TYPE_INGRESS_CLONE) {
-                // send the ack back
-                send_ack(standard_metadata.ingress_port);
-            }
-            else { // normal packet
+            if (hdr.adder.is_result == 0) {
                 // read the number from the register
                 bit<32> num;
                 bit<1>  valid;
@@ -212,29 +203,31 @@ control MyIngress(inout headers hdr,
                 //    buffer the number and wait for the next packet
                 // 2. if valid == 1, then the register is full, so we can
                 //    proceed with the calculation
-                if (valid == 0) { // the register is empty
-                    clone_packet();
-
+                // the register is empty
+                if (valid == 0) { 
                     // save the number in the register
                     save_num(index, hdr.adder.num, srcPort);
-                    operation_drop();
+                    send_ack(srcPort, 0);
                 }
-                else if (valid == 1 && srcPort != author) { // the register is occupied by another host
-                    clone_packet();
-
+                // the register is occupied by another host
+                else if (valid == 1 && srcPort != author) { 
                     // calculate the result
                     bit<32> result = num + hdr.adder.num;
                     // save the result in header
                     save_result(result, hdr.adder.seq_num);
                     // clear the register
                     delete_num(index);
-                    // send the result back
-                    send_result(ADDER_DST_PORT);
+                    send_ack(srcPort, 1);
                 }
                 else { // the register is occupied by the same host
                     // drop the packet
                     operation_drop();
                 }
+            }
+            else if (hdr.adder.is_result == 1)
+            {
+                // forward the packet to the destination
+                send_result(ADDER_DST_PORT);
             }
         } 
         else {
@@ -249,7 +242,9 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    apply { }
+    apply {
+
+    }
 }
 
 /*************************************************************************
