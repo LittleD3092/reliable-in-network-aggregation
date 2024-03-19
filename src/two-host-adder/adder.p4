@@ -65,8 +65,8 @@ header udp_t {
     bit<16> checksum;
 }
 //const type
-const bit<16> TYPE_ETHERNET = 0x1234;
-const bit<8>  TYPE_IPV4    = 0x800;
+const bit<16> TYPE_ADDER   = 0x1234;
+const bit<16>  TYPE_IPV4    = 0x0800;
 const bit<8>  TYPE_UDP     = 0x11;
 /*
  * This is a custom protocol header for the calculator. We'll use
@@ -142,22 +142,22 @@ parser MyParser(packet_in packet,
     state parse_ethernet{
         packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
-            TYPE_ETHERNET : parse_ipv4;
+            TYPE_IPV4     : parse_ipv4;
             default       : accept;
         }
     }
     state parse_ipv4{
         packet.extract(hdr.ipv4);
         transition select(hdr.ipv4.protocol) {
-            TYPE_IPV4 : parse_udp;
+            TYPE_UDP  : parse_udp;
             default   : accept;
         }
     }
     state parse_udp{
         packet.extract(hdr.udp);
         transition select(hdr.udp.dstPort) {
-            TYPE_UDP : check_adder;
-            default  : accept;
+            TYPE_ADDER : check_adder;
+            default    : accept;
         }
     }
     state check_adder {
@@ -233,7 +233,7 @@ control MyIngress(inout headers hdr,
         // forward the packet to the destination
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = ADDER_DST_ADDR;
-        hdr.ethernet.etherType = ADDER_ETYPE;
+        hdr.ethernet.etherType = TYPE_IPV4;
         standard_metadata.egress_spec = port;
     }
 
