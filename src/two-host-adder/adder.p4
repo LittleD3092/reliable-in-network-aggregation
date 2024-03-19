@@ -1,7 +1,32 @@
 /* -*- P4_16 -*- */
+/*
+ * Define the headers the program will recognize
+ */
+#include <core.p4>
+#include <v1model.p4>
 
 /*
         1               2               3               4
++---------------+---------------+---------------+---------------+
+                          dst_addr<48>                          |
++---------------+---------------+---------------+---------------+
+|                         src_addr<48>                          |
++---------------+---------------+---------------+---------------+
+|           ether_type          |                               |
++---------------+---------------+---------------+---------------+                               |
+|   version     |       ihl     |    diffserv   |   totalLen    |
++---------------+---------------+---------------+---------------+
+|        identification         |   flags<3>  |  fragOffset<13> |
++---------------+---------------+---------------+---------------+
+|       ttl     |   protocol    |           hdrChecksum         |
++---------------+---------------+---------------+---------------+
+|                            srcAddr                            |
++---------------+---------------+---------------+---------------+
+|                            dstAddr                            |
++---------------+---------------+---------------+---------------+
+|            Src_port           |            Dst_port           |
++---------------+---------------+---------------+---------------+
+|           Length              |             Checksum          |
 +---------------+---------------+---------------+---------------+
 |      'A'      |      'D'      | VERSION_MAJOR | VERSION_MINOR |
 +---------------+---------------+---------------+---------------+
@@ -10,14 +35,7 @@
 |                              NUM                              |
 +---------------------------------------------------------------+
 */
-
-#include <core.p4>
-#include <v1model.p4>
-
-/*
- * Define the headers the program will recognize
- */
-
+//UDP+IP+ETHENET header
 /*
  * Standard Ethernet header
  */
@@ -26,12 +44,34 @@ header ethernet_t {
     bit<48> srcAddr;
     bit<16> etherType;
 }
-
+header ipv4_t {
+    bit<4>    version;
+    bit<4>    ihl;
+    bit<8>    diffserv;
+    bit<16>   totalLen;
+    bit<16>   identification;
+    bit<3>    flags;
+    bit<13>   fragOffset;
+    bit<8>    ttl;
+    bit<8>    protocol;
+    bit<16>   hdrChecksum;
+    bit<32>   srcAddr;
+    bit<32>   dstAddr;
+}
+header udp_t {
+    bit<16> srcPort;
+    bit<16> dstPort;
+    bit<16> length;
+    bit<16> checksum;
+}
+//const type
+const bit<16> TYPE_ETHERNET = 0x1234;
+const bit<8>  TYPE_IPV4    = 0x800;
+const bit<8>  TYPE_UDP     = 0x11;
 /*
  * This is a custom protocol header for the calculator. We'll use
  * etherType 0x1234 for it (see parser)
  */
-const bit<16> ADDER_ETYPE         = 0x1234;
 const bit<8>  ADDER_A             = 0x41;
 const bit<8>  ADDER_D             = 0x44;
 const bit<8>  ADDER_VERSION_MAJOR = 0x00;
@@ -48,17 +88,7 @@ const bit<9>  ADDER_DST_PORT      = 3;
 // buffer size
 const bit<32> BUFFER_SIZE         = 256;
 
-// clone session id
-const bit<32> CLONE_SESSION_ID = 500;
 
-// clone type
-#define PKT_INSTANCE_TYPE_NORMAL 0
-#define PKT_INSTANCE_TYPE_INGRESS_CLONE 1
-#define PKT_INSTANCE_TYPE_EGRESS_CLONE 2
-#define PKT_INSTANCE_TYPE_COALESCED 3
-#define PKT_INSTANCE_TYPE_INGRESS_RECIRC 4
-#define PKT_INSTANCE_TYPE_REPLICATION 5
-#define PKT_INSTANCE_TYPE_RESUBMIT 6
 
 header adder_t {
     bit<8>  a;
@@ -77,6 +107,8 @@ header adder_t {
  */
 struct headers {
     ethernet_t   ethernet;
+    ipv4_t       ipv4;
+    udp_t        udp;
     adder_t      adder;
 }
 
@@ -98,14 +130,36 @@ parser MyParser(packet_in packet,
                 out headers hdr,
                 inout metadata meta,
                 inout standard_metadata_t standard_metadata) {
+    
     state start {
-        packet.extract(hdr.ethernet);
+        /*packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
             ADDER_ETYPE : check_adder;
             default     : accept;
+        }*/
+        transition parse_ethernet;
+    }
+    state parse_ethernet{
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.etherType) {
+            TYPE_ETHERNET : parse_ipv4;
+            default       : accept;
         }
     }
-
+    state parse_ipv4{
+        packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol) {
+            TYPE_IPV4 : parse_udp;
+            default   : accept;
+        }
+    }
+    state parse_udp{
+        packet.extract(hdr.udp);
+        transition select(hdr.udp.dstPort) {
+            TYPE_UDP : check_adder;
+            default  : accept;
+        }
+    }
     state check_adder {
         transition select(packet.lookahead<adder_t>().a,
         packet.lookahead<adder_t>().d,
@@ -163,7 +217,7 @@ control MyIngress(inout headers hdr,
         mark_to_drop(standard_metadata);
     }
 
-    action send_ack(bit<9> port, bit<8> is_result) {
+    /*action send_ack(bit<9> port, bit<8> is_result) {
         // send the ack back
         // hdr.adder.num = num; (remain the same)
         // hdr.adder.seq_num = seq_num; (remain the same)
@@ -173,7 +227,7 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.dstAddr = tmp;
         hdr.ethernet.etherType = ADDER_ETYPE;
         standard_metadata.egress_spec = port;
-    }
+    }*/
 
     action send_result(bit<9> port) {
         // forward the packet to the destination
@@ -207,7 +261,7 @@ control MyIngress(inout headers hdr,
                 if (valid == 0) { 
                     // save the number in the register
                     save_num(index, hdr.adder.num, srcPort);
-                    send_ack(srcPort, 0);
+                    //send_ack(srcPort, 0);
                 }
                 // the register is occupied by another host
                 else if (valid == 1 && srcPort != author) { 
@@ -217,7 +271,7 @@ control MyIngress(inout headers hdr,
                     save_result(result, hdr.adder.seq_num);
                     // clear the register
                     delete_num(index);
-                    send_ack(srcPort, 1);
+                    //send_ack(srcPort, 1);
                 }
                 else { // the register is occupied by the same host
                     // drop the packet
@@ -261,6 +315,8 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv4);
+        packet.emit(hdr.udp);
         packet.emit(hdr.adder);
     }
 }
