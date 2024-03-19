@@ -65,7 +65,7 @@ header udp_t {
     bit<16> checksum;
 }
 //const type
-const bit<16> TYPE_ADDER   = 0x1234;
+const bit<16> TYPE_ADDER   = 1234;
 const bit<16>  TYPE_IPV4    = 0x0800;
 const bit<8>  TYPE_UDP     = 0x11;
 /*
@@ -80,10 +80,11 @@ const bit<8>  ADDER_VERSION_MINOR = 0x01;
 // the address of hosts
 const bit<48> HOST_1_ADDR         = 0x080000000101;
 const bit<48> HOST_2_ADDR         = 0x080000000102;
-const bit<48> ADDER_DST_ADDR      = 0x080000000103;
+const bit<48> DST_MAC             = 0x080000000103;
+const bit<32> DST_IP              = 0xa0000103;
 const bit<9>  HOST_1_PORT         = 1;
 const bit<9>  HOST_2_PORT         = 2;
-const bit<9>  ADDER_DST_PORT      = 3;
+const bit<9>  DST_PORT            = 3;
 
 // buffer size
 const bit<32> BUFFER_SIZE         = 256;
@@ -231,57 +232,50 @@ control MyIngress(inout headers hdr,
 
     action send_result(bit<9> port) {
         // forward the packet to the destination
-        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-        hdr.ethernet.dstAddr = ADDER_DST_ADDR;
-        hdr.ethernet.etherType = TYPE_IPV4;
+        hdr.ethernet.dstAddr = DST_MAC;
         standard_metadata.egress_spec = port;
     }
 
     apply {
         if (hdr.adder.isValid()) {
-            if (hdr.adder.is_result == 0) {
-                // read the number from the register
-                bit<32> num;
-                bit<1>  valid;
-                bit<9>  author;
-                bit<32> index;
-                bit<32> base = 0;
-                bit<9>  srcPort = standard_metadata.ingress_port;
-                hash(index, HashAlgorithm.crc32, base, {hdr.adder.seq_num}, BUFFER_SIZE - 1);
-                num_buffer.read(num, index);
-                num_buffer_valid.read(valid, index);
-                num_buffer_author.read(author, index);
+          
+            // read the number from the register
+            bit<32> num;
+            bit<1>  valid;
+            bit<9>  author;
+            bit<32> index;
+            bit<32> base = 0;
+            bit<9>  srcPort = standard_metadata.ingress_port;
+            hash(index, HashAlgorithm.crc32, base, {hdr.adder.seq_num}, BUFFER_SIZE - 1);
+            num_buffer.read(num, index);
+            num_buffer_valid.read(valid, index);
+            num_buffer_author.read(author, index);
 
-                // based on valid, determine what to do:
-                // 1. if valid == 0, then the register is empty, so we need to
-                //    buffer the number and wait for the next packet
-                // 2. if valid == 1, then the register is full, so we can
-                //    proceed with the calculation
-                // the register is empty
-                if (valid == 0) { 
-                    // save the number in the register
-                    save_num(index, hdr.adder.num, srcPort);
-                    //send_ack(srcPort, 0);
-                }
-                // the register is occupied by another host
-                else if (valid == 1 && srcPort != author) { 
-                    // calculate the result
-                    bit<32> result = num + hdr.adder.num;
-                    // save the result in header
-                    save_result(result, hdr.adder.seq_num);
-                    // clear the register
-                    delete_num(index);
-                    //send_ack(srcPort, 1);
-                }
-                else { // the register is occupied by the same host
-                    // drop the packet
-                    operation_drop();
-                }
+            // based on valid, determine what to do:
+            // 1. if valid == 0, then the register is empty, so we need to
+            //    buffer the number and wait for the next packet
+            // 2. if valid == 1, then the register is full, so we can
+            //    proceed with the calculation
+            // the register is empty
+            if (valid == 0) { 
+                // save the number in the register
+                save_num(index, hdr.adder.num, srcPort);
+                //send_ack(srcPort, 0);
             }
-            else if (hdr.adder.is_result == 1)
-            {
-                // forward the packet to the destination
-                send_result(ADDER_DST_PORT);
+            // the register is occupied by another host
+            else if (valid == 1 && srcPort != author) { 
+                // calculate the result
+                bit<32> result = num + hdr.adder.num;
+                // save the result in header
+                save_result(result, hdr.adder.seq_num);
+                // clear the register
+                delete_num(index);
+                //send_ack(srcPort, 1);
+                send_result(DST_PORT);
+            }
+            else { // the register is occupied by the same host
+                // drop the packet
+                operation_drop();
             }
         } 
         else {
