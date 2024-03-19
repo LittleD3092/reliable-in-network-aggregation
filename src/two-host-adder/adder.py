@@ -11,7 +11,8 @@ from scapy.all import (
     IP,
     UDP,
     send,
-    sniff
+    sniff,
+    bind_layers
 )
 
 
@@ -50,21 +51,41 @@ class AdderSender:
 
 class AdderReceiver:
     def __init__(self):
-        self.filter = 'udp port 1234'
+        self.filter = 'port 1234'
 
     def handle_pkt(self, pkt):
         if pkt.haslayer(Adder):
             print("Received packet:")
             print("    num: ", pkt[Adder].num)
             print("    seq_num: ", pkt[Adder].seq_num)
+        else:
+            print("Received non-Adder packet")
+            pkt.show()
 
 
     def receive(self):
-        sniff(filter=self.filter, prn=self.handle_pkt)
+        sniff(filter=self.filter, prn=self.handle_pkt, iface="eth0")
+
+def parse_num(num):
+    if num[0] == '[' and num[-1] == ']':
+        num = num[1:-1]
+        if ',' in num:
+            return [int(x) for x in num.split(',')]
+        elif ' ' in num:
+            return [int(x) for x in num.split(' ')]
+        elif ':' in num:
+            arr = num.split(':')
+            if len(arr) == 2:
+                return list(range(int(arr[0]), int(arr[1])))
+            elif len(arr) == 3:
+                return list(range(int(arr[0]), int(arr[1]), int(arr[2])))
+        else:
+            return [int(num)]
+    else:
+        return [int(num)]
 
 def main():
-    iface = 'eth0'
-
+    bind_layers(UDP, Adder, dport=1234)
     node_type = input("Is this a sender or receiver? (s/r): ")
     if node_type == 's':
         sender = AdderSender(
@@ -72,13 +93,10 @@ def main():
             dest_port = 1234
         )
         while True:
-            num = input("Enter a number to send: ")
-            try:
-                num = int(num)
-            except ValueError:
-                print("Invalid number")
-                continue
-            sender.send(num)
+            num = input("Enter a number (numbers) to send: ")
+            parsed_nums = parse_num(num)
+            for i in parsed_nums:
+                sender.send(i)
 
     elif node_type == 'r':
         receiver = AdderReceiver()
