@@ -11,6 +11,7 @@ from scapy.all import (
     IP,
     UDP,
     send,
+    sendp,
     sniff,
     bind_layers
 )
@@ -39,6 +40,7 @@ class AdderSender:
             self.seq_num += 1
 
         pkt = (
+            Ether(dst=self.dest_mac, type = 0x0800) /
             IP(dst=self.dest_ip) / 
             UDP(sport = self.src_port, dport=self.dest_port) / 
             Adder(
@@ -47,7 +49,7 @@ class AdderSender:
             )
         )
 
-        send(pkt)
+        sendp(pkt, iface="eth0")
 
 class AdderReceiver:
     def __init__(self):
