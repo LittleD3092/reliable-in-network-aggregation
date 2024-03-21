@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import re
+import time
+import threading
 
 from scapy.all import (
     IntField,
@@ -34,6 +36,13 @@ class AdderSender:
         self.dest_ip = dest_ip
         self.dest_port = dest_port
         self.seq_num = 0
+        threading.Thread(target=self.listen_for_ack).start()
+    def listen_for_ack(self):
+        def handle_pkt(pkt):
+            if pkt.haslayer(Adder) and pkt[Adder].is_result == 0x01:
+                print("[ACK] seq_num: ", pkt[Adder].seq_num)
+        sniff(filter='port 1234', prn=handle_pkt, iface="eth0")
+
     def send(self, num, seq_num = -1):
         if seq_num == -1:
             seq_num = self.seq_num
@@ -48,18 +57,7 @@ class AdderSender:
                 seq_num=seq_num, is_result=0x00, num=num
             )
         )
-
         sendp(pkt, iface="eth0")
-
-        # wait for ack
-        ack = sniff(
-            filter='port 1234', count=1, 
-            iface="eth0", timeout=5
-        )
-        if ack:
-            print("[ACK] seq_num: ", ack[0][Adder].seq_num)
-        else:
-            print("[ACK TIMEOUT] seq_num: ", seq_num)
 
 class AdderReceiver:
     def __init__(self):
@@ -67,6 +65,8 @@ class AdderReceiver:
         self.port = 1234
 
     def handle_pkt(self, pkt):
+        if pkt.haslayer(Adder) and pkt[Adder].is_result == 0x01:
+            return
         if pkt.haslayer(Adder):
             print("Received packet:")
             print("    num: ", pkt[Adder].num)
