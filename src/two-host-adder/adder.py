@@ -54,12 +54,25 @@ class AdderSender:
 class AdderReceiver:
     def __init__(self):
         self.filter = 'port 1234'
+        self.port = 1234
 
     def handle_pkt(self, pkt):
         if pkt.haslayer(Adder):
             print("Received packet:")
             print("    num: ", pkt[Adder].num)
             print("    seq_num: ", pkt[Adder].seq_num)
+
+            # send ack
+            ack_pkt = (
+                Ether(dst = pkt[Ether].src, type = 0x0800) /
+                IP(dst = pkt[IP].src) /
+                UDP(sport = self.port, dport = pkt[UDP].sport) /
+                Adder(
+                    A='A', D='D', ver_maj=0x00, ver_min=0x01,
+                    seq_num = pkt[Adder].seq_num, is_result=0x01, num = pkt[Adder].num
+                )
+            )
+            sendp(ack_pkt, iface="eth0")
         else:
             print("Received non-Adder packet")
             pkt.show()
