@@ -2,5 +2,24 @@
   "target": "bmv2",
   "p4info": "build/adder.p4.p4info.txt",
   "bmv2_json": "build/adder.json",
-  "table_entries": [ ]
+  "table_entries": [ ],
+  "multicast_group_entries" : [
+    {
+      "multicast_group_id" : 1,
+      "replicas" : [
+        {
+          "egress_port" : 1,
+          "instance" : 1
+        },
+        {
+          "egress_port" : 2,
+          "instance" : 1
+        },
+        {
+          "egress_port" : 3,
+          "instance" : 1
+        }
+      ]
+    }
+  ]
 }
