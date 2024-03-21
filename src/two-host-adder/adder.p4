@@ -304,7 +304,7 @@ control MyEgress(inout headers hdr,
         mark_to_drop(standard_metadata);
     }
     apply {
-        if (standard_metadata.egress_port == 3)
+        if (standard_metadata.egress_port == standard_metadata.ingress_port)
             drop();
     }
 }
