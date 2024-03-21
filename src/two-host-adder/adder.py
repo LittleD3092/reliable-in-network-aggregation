@@ -51,6 +51,16 @@ class AdderSender:
 
         sendp(pkt, iface="eth0")
 
+        # wait for ack
+        ack = sniff(
+            filter='port 1234', count=1, 
+            iface="eth0", timeout=1
+        )
+        if ack:
+            print("Received ack for seq_num: ", ack[0][Adder].seq_num)
+        else:
+            print("No ack received for seq_num: ", seq_num)
+
 class AdderReceiver:
     def __init__(self):
         self.filter = 'port 1234'
