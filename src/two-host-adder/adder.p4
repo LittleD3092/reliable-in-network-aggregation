@@ -65,9 +65,10 @@ header udp_t {
     bit<16> checksum;
 }
 //const type
-const bit<16> TYPE_ADDER   = 1234;
+const bit<16>  TYPE_ADDER   = 1234;
 const bit<16>  TYPE_IPV4    = 0x0800;
-const bit<8>  TYPE_UDP     = 0x11;
+const bit<16>  TYPE_ARP     = 0x0806;
+const bit<8>  TYPE_UDP      = 0x11;
 /*
  * This is a custom protocol header for the calculator. We'll use
  * etherType 0x1234 for it (see parser)
@@ -235,9 +236,14 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.dstAddr = DST_MAC;
         standard_metadata.egress_spec = port;
     }
-
+    action multicast() {
+        standard_metadata.mcast_grp = 1;
+    }
     apply {
-        if (hdr.adder.isValid()) {
+        if(standard_metadata.ingress_port == 3){
+            multicast();
+        }
+        else if (hdr.adder.isValid()) {
           
             // read the number from the register
             bit<32> num;
@@ -262,6 +268,11 @@ control MyIngress(inout headers hdr,
                 save_num(index, hdr.adder.num, srcPort);
                 //send_ack(srcPort, 0);
             }
+            else if (valid == 0) { 
+                // save the number in the register
+                save_num(index, hdr.adder.num, srcPort);
+                //send_ack(srcPort, 0);
+            }
             // the register is occupied by another host
             else if (valid == 1 && srcPort != author) { 
                 // calculate the result
@@ -270,7 +281,6 @@ control MyIngress(inout headers hdr,
                 save_result(result, hdr.adder.seq_num);
                 // clear the register
                 delete_num(index);
-                //send_ack(srcPort, 1);
                 send_result(DST_PORT);
             }
             else { // the register is occupied by the same host
@@ -290,8 +300,12 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
+    action drop() {
+        mark_to_drop(standard_metadata);
+    }
     apply {
-
+        if (standard_metadata.egress_port == 3)
+            drop();
     }
 }
 
