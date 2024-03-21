@@ -13,10 +13,13 @@
 |                         src_addr<48>                          |
 +---------------+---------------+---------------+---------------+
 |           ether_type          |                               |
-+---------------+---------------+---------------+---------------+                               |
++---------------+---------------+---------------+---------------+   
+
+
++---------------+---------------+---------------+---------------+                               
 |   version     |       ihl     |    diffserv   |   totalLen    |
 +---------------+---------------+---------------+---------------+
-|        identification         |   flags<3>  |  fragOffset<13> |
+|        identification         | flags<3>|      fragOffset<13> |
 +---------------+---------------+---------------+---------------+
 |       ttl     |   protocol    |           hdrChecksum         |
 +---------------+---------------+---------------+---------------+
@@ -24,13 +27,16 @@
 +---------------+---------------+---------------+---------------+
 |                            dstAddr                            |
 +---------------+---------------+---------------+---------------+
+
+
++---------------+---------------+---------------+---------------+   
 |            Src_port           |            Dst_port           |
 +---------------+---------------+---------------+---------------+
 |           Length              |             Checksum          |
 +---------------+---------------+---------------+---------------+
 |      'A'      |      'D'      | VERSION_MAJOR | VERSION_MINOR |
 +---------------+---------------+---------------+---------------+
-|    SEQ_NUM    |   IS_RESULT   |
+|    SEQ_NUM    |   IS_RESULT   |                               |
 +---------------------------------------------------------------+
 |                              NUM                              |
 +---------------------------------------------------------------+
@@ -214,7 +220,7 @@ control MyIngress(inout headers hdr,
         num_buffer_author.write(index, 0);
     }
 
-    action operation_drop() {
+    action drop() {
         // drop the packet
         mark_to_drop(standard_metadata);
     }
@@ -239,12 +245,29 @@ control MyIngress(inout headers hdr,
     action multicast() {
         standard_metadata.mcast_grp = 1;
     }
-    apply {
-        if(standard_metadata.ingress_port == 3){
-            multicast();
+    action ipv4_forward(bit<48> dstAddr, bit<9> port) {
+        hdr.ethernet.dstAddr = dstAddr;
+        standard_metadata.egress_spec = port;
+    }
+    table ipv4_lookup{
+        key = {
+            hdr.ipv4.dstAddr: lpm;
         }
-        else if (hdr.adder.isValid()) {
-          
+        actions = {
+           ipv4_forward;
+           drop;
+           multicast;
+        }
+        size = 1024;
+        default_action = multicast;
+    }
+    apply {
+        if (hdr.adder.isValid()) {
+            if(standard_metadata.ingress_port==3){
+                multicast();
+            }
+            else{
+
             // read the number from the register
             bit<32> num;
             bit<1>  valid;
@@ -285,11 +308,12 @@ control MyIngress(inout headers hdr,
             }
             else { // the register is occupied by the same host
                 // drop the packet
-                operation_drop();
+                drop();
+            }
             }
         } 
         else {
-            operation_drop();
+            ipv4_lookup.apply();
         }
     }
 }
@@ -303,9 +327,20 @@ control MyEgress(inout headers hdr,
     action drop() {
         mark_to_drop(standard_metadata);
     }
+    action revise_dstIP(){
+        if(standard_metadata.egress_port==1){
+            hdr.ipv4.dstAddr = 0x0a000101;
+        }
+        else if(standard_metadata.egress_port==2){
+            hdr.ipv4.dstAddr = 0x0a000102;
+        }
+        else if(standard_metadata.egress_port==3){
+            hdr.ipv4.dstAddr = 0x0a000103;
+        }
+    }
     apply {
-        if (standard_metadata.egress_port == standard_metadata.ingress_port)
-            drop();
+        if (standard_metadata.egress_port == standard_metadata.ingress_port) drop();
+        else revise_dstIP();
     }
 }
 
