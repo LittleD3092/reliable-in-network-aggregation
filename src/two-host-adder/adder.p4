@@ -7,15 +7,16 @@
 
 /*
         1               2               3               4
+Ethernet header
 +---------------+---------------+---------------+---------------+
-                          dst_addr<48>                          |
+|                         dst_addr<48>                          |
 +---------------+---------------+---------------+---------------+
 |                         src_addr<48>                          |
 +---------------+---------------+---------------+---------------+
 |           ether_type          |                               |
 +---------------+---------------+---------------+---------------+   
 
-
+IP header
 +---------------+---------------+---------------+---------------+                               
 |   version     |       ihl     |    diffserv   |   totalLen    |
 +---------------+---------------+---------------+---------------+
@@ -28,11 +29,22 @@
 |                            dstAddr                            |
 +---------------+---------------+---------------+---------------+
 
-
+TCP header
 +---------------+---------------+---------------+---------------+   
 |            Src_port           |            Dst_port           |
 +---------------+---------------+---------------+---------------+
-|           Length              |             Checksum          |
+|                            seq_num                            |
++---------------+---------------+---------------+---------------+
+|                            ack_num                            |
++---------------+---------------+---------------+---------------+
+|dt_of<4>|re<3>|   ctl_fl<9>    |          window_size<16>      |
++---------------+---------------+---------------+---------------+
+|            Checksum           |           ugrent_num          |
++---------------+---------------+---------------+---------------+
+|                            options                            |   
++---------------+---------------+---------------+---------------+
+
+Adder header
 +---------------+---------------+---------------+---------------+
 |      'A'      |      'D'      | VERSION_MAJOR | VERSION_MINOR |
 +---------------+---------------+---------------+---------------+
@@ -41,7 +53,7 @@
 |                              NUM                              |
 +---------------------------------------------------------------+
 */
-//UDP+IP+ETHENET header
+//TCPP+IP+ETHENET header
 /*
  * Standard Ethernet header
  */
@@ -70,10 +82,24 @@ header udp_t {
     bit<16> length;
     bit<16> checksum;
 }
+header tcp_t{
+    bit<16> srcPort;
+    bit<16> dstPort;
+    bit<32> seq_num;
+    bit<32> ack_num;
+    bit<4>  data_ofset;
+    bit<3>  reserved;
+    bit<9>  ctl_flag;
+    bit<16> window_size;
+    bit<16> checksum;
+    bit<16> urgent_num;
+    //bit<32> options;
+}
 //const type
 const bit<16>  TYPE_ADDER   = 1234;
 const bit<16>  TYPE_IPV4    = 0x0800;
 const bit<16>  TYPE_ARP     = 0x0806;
+const bit<8>  TYPE_TCP     = 0x06;
 const bit<8>  TYPE_UDP      = 0x11;
 /*
  * This is a custom protocol header for the calculator. We'll use
@@ -116,7 +142,8 @@ header adder_t {
 struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
-    udp_t        udp;
+    //udp_t        udp;
+    tcp_t        tcp;
     adder_t      adder;
 }
 
@@ -140,11 +167,6 @@ parser MyParser(packet_in packet,
                 inout standard_metadata_t standard_metadata) {
     
     state start {
-        /*packet.extract(hdr.ethernet);
-        transition select(hdr.ethernet.etherType) {
-            ADDER_ETYPE : check_adder;
-            default     : accept;
-        }*/
         transition parse_ethernet;
     }
     state parse_ethernet{
@@ -157,13 +179,21 @@ parser MyParser(packet_in packet,
     state parse_ipv4{
         packet.extract(hdr.ipv4);
         transition select(hdr.ipv4.protocol) {
-            TYPE_UDP  : parse_udp;
+            //TYPE_UDP  : parse_udp;
+            TYPE_TCP  : parse_tcp;
             default   : accept;
         }
     }
-    state parse_udp{
-        packet.extract(hdr.udp);
-        transition select(hdr.udp.dstPort) {
+    // state parse_udp{
+    //     packet.extract(hdr.udp);
+    //     transition select(hdr.udp.dstPort) {
+    //         TYPE_ADDER : check_adder;
+    //         default    : accept;
+    //     }
+    // }
+    state parse_tcp{
+        packet.extract(hdr.tcp);
+        transition select(hdr.tcp.dstPort) {
             TYPE_ADDER : check_adder;
             default    : accept;
         }
@@ -289,20 +319,17 @@ control MyIngress(inout headers hdr,
             if (valid == 0) { 
                 // save the number in the register
                 save_num(index, hdr.adder.num, srcPort);
-                //send_ack(srcPort, 0);
             }
             else if (valid == 0) { 
                 // save the number in the register
                 save_num(index, hdr.adder.num, srcPort);
-                //send_ack(srcPort, 0);
             }
             // the register is occupied by another host
             else if (valid == 1 && srcPort != author) { 
                 // calculate the result
                 bit<32> result = num + hdr.adder.num;
-                // save the result in header
+                // save the result in header and clear the register
                 save_result(result, hdr.adder.seq_num);
-                // clear the register
                 delete_num(index);
                 send_result(DST_PORT);
             }
@@ -359,7 +386,8 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
-        packet.emit(hdr.udp);
+        //packet.emit(hdr.udp);
+        packet.emit(hdr.tcp);
         packet.emit(hdr.adder);
     }
 }
