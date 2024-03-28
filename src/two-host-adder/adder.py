@@ -15,15 +15,17 @@ from scapy.all import (
     XByteField,
     Ether,
     IP,
-    UDP,
+    TCP,
     send,
     sendp,
     sniff,
-    bind_layers
+    bind_layers,
+    socket
 )
 
 import sys
 import io
+import time
 from contextlib import contextmanager
 
 class Adder(Packet):
@@ -36,79 +38,84 @@ class Adder(Packet):
                     XByteField("is_result", 0x00),
                     IntField("num", 0x00) ]
 
-bind_layers(UDP, Adder, dport=1234)
+bind_layers(TCP, Adder, dport=1234)
 
 class AdderSender:
-    def __init__(self, tui, dest_ip, dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:03'):
+    def __init__(self, tui, dest_ip = '10.0.1.3', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:03'):
         self.src_port = src_port
         self.dest_mac = dest_mac
         self.dest_ip = dest_ip
         self.dest_port = dest_port
         self.seq_num = 0
         self.tui = tui
+        self.initial_seq = None
     def listen_for_ack(self):
         def handle_pkt(pkt):
-            if pkt.haslayer(Adder) and pkt[Adder].is_result == 0x01:
-                self.tui.print(
-                    "[ACK] seq_num: " + 
-                    str(pkt[Adder].seq_num) + 
-                    " num: " + str(pkt[Adder].num)
-                )
-        sniff(filter='port 1234', prn=handle_pkt, iface="eth0")
+            if pkt.haslayer(TCP) and pkt[TCP].flags & 0x10 and pkt[TCP].flags & 0x03 == 0x00:
+                if self.initial_seq is None:
+                    self.initial_seq = pkt[TCP].seq
+            else:
+                return
+            relative_seq = pkt[TCP].seq - self.initial_seq
+            self.tui.print("[ACK] seq_num: " + str(relative_seq))
 
-    def send(self, num, seq_num = -1):
+        sniff(filter='port 1234', prn=handle_pkt, iface="eth0", store=False)
+
+    def send(self, num_arr, seq_num = -1):
         if seq_num == -1:
             seq_num = self.seq_num
             self.seq_num += 1
 
-        pkt = (
-            Ether(dst=self.dest_mac, type = 0x0800) /
-            IP(dst=self.dest_ip) / 
-            UDP(sport = self.src_port, dport=self.dest_port) / 
-            Adder(
-                A='A', D='D', ver_maj=0x00, ver_min=0x01, 
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.dest_ip, self.dest_port))
+
+        for num in num_arr:
+            time.sleep(0.1)
+            payload = Adder(
+                A='A', D='D', ver_maj=0x00, ver_min=0x01,
                 seq_num=seq_num, is_result=0x00, num=num
             )
-        )
-        sendp(pkt, iface="eth0", verbose=False)
-        self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
+            s.send(payload.build())
+            self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
+
+        s.close()
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
         t.start()
 
 class AdderReceiver:
-    def __init__(self, tui):
-        self.filter = 'port 1234'
-        self.port = 1234
+    def __init__(self, tui, server_ip = '10.0.1.3', server_port = 1234, filter='port 1234'):
+        self.filter = filter
+        self.port = server_port
         self.tui = tui
+        self.server_ip = server_ip
         
-
-    def handle_pkt(self, pkt):
-        if pkt.haslayer(Adder) and pkt[Adder].is_result == 0x01:
-            return
-        if pkt.haslayer(Adder):
-            tui.print(
-                "[RECV] seq_num: " + 
-                str(pkt[Adder].seq_num) + 
-                " num: " + str(pkt[Adder].num)
-            )
-
-            # send ack
-            ack_pkt = (
-                Ether(dst = pkt[Ether].src, type = 0x0800) /
-                IP(dst = pkt[IP].src) /
-                UDP(sport = self.port, dport = pkt[UDP].sport) /
-                Adder(
-                    A='A', D='D', ver_maj=0x00, ver_min=0x01,
-                    seq_num = pkt[Adder].seq_num, is_result=0x01, num = pkt[Adder].num
-                )
-            )
-            sendp(ack_pkt, iface="eth0", verbose=False)
-        else:
-            tui.print("[RECV] Unknown packet")
     def receive(self):
-        sniff(filter=self.filter, prn=self.handle_pkt, iface="eth0")
+        while True:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.tui.print("[SYSTEM] Starting up on " + self.server_ip + " port " + str(self.port))
+            s.bind((self.server_ip, self.port))
+            s.listen(1)
+            while True:
+                self.tui.print("[SYSTEM] Waiting for a connection...")
+                conn, addr = s.accept()
+                try:
+                    self.tui.print("[SYSTEM] Connection from " + str(addr))
+                    while True:
+                        data = conn.recv(1024)
+                        if data:
+                            pkt = Adder(data)
+                            self.tui.print(
+                                "[RECV] seq_num: " + 
+                                str(pkt.seq_num) + 
+                                " num: " + str(pkt.num)
+                            )
+                        else:
+                            self.tui.print("[SYSTEM] No more data from " + str(addr))
+                            break
+                finally:
+                    conn.close()
     def run_thread(self):
         t = threading.Thread(target=self.receive)
         t.start()
@@ -179,9 +186,8 @@ class Tui:
             else:
                 self.print("Invalid command")
         elif self.prompt == "[SEND] (num)> ":
-            num = parse_num(command)
-            for n in num:
-                self.agent.send(n)
+            num_arr = parse_num(command)
+            self.agent.send(num_arr)
         elif self.prompt == "[RECV]> ":
             # Add receiver command here if needed
             parsed_cmd = command.split(' ')
