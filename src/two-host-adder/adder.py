@@ -55,11 +55,11 @@ class AdderSender:
                 if self.initial_seq is None:
                     self.initial_seq = pkt[TCP].seq
                 relative_seq = pkt[TCP].seq - self.initial_seq
-                self.tui.print("[ACK] seq_num: " + str(relative_seq))
+                self.tui.print("[ACK] seq_num: " + str(relative_seq) + " flags: ", str(pkt[TCP].flags))
             else:
                 return
 
-        sniff(filter='port 1234', prn=handle_pkt, iface="eth0", store=False)
+        sniff(filter='tcp and src port 1234', prn=handle_pkt, iface="eth0", store=False)
 
     def send(self, num_arr, seq_num = -1):
         if seq_num == -1:
