@@ -55,7 +55,7 @@ class AdderSender:
                 if self.initial_seq is None:
                     self.initial_seq = pkt[TCP].seq
                 relative_seq = pkt[TCP].seq - self.initial_seq
-                self.tui.print("[ACK] seq_num: " + str(relative_seq) + " flags: ", str(pkt[TCP].flags))
+                self.tui.print("[ACK] seq_num: " + str(relative_seq))
             else:
                 return
 
