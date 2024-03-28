@@ -141,6 +141,14 @@ class Tui:
         def _(event):
             self.focus_input()
 
+        # Prevent the user from deleting the prompt
+        @self.kb.add('backspace')
+        def _(event):
+            if event.current_buffer.cursor_position <= len(self.prompt):
+                event.current_buffer.cursor_position = len(self.prompt)
+            else:
+                event.current_buffer.delete_before_cursor()
+
         # Text areas for input in each "window"
         self.input_text_area = TextArea(
             text=self.prompt,
