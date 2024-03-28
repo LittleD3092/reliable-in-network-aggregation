@@ -54,10 +54,10 @@ class AdderSender:
             if pkt.haslayer(TCP) and pkt[TCP].flags & 0x10 and pkt[TCP].flags & 0x03 == 0x00:
                 if self.initial_seq is None:
                     self.initial_seq = pkt[TCP].seq
+                relative_seq = pkt[TCP].seq - self.initial_seq
+                self.tui.print("[ACK] seq_num: " + str(relative_seq))
             else:
                 return
-            relative_seq = pkt[TCP].seq - self.initial_seq
-            self.tui.print("[ACK] seq_num: " + str(relative_seq))
 
         sniff(filter='port 1234', prn=handle_pkt, iface="eth0", store=False)
 
@@ -65,6 +65,7 @@ class AdderSender:
         if seq_num == -1:
             seq_num = self.seq_num
             self.seq_num += 1
+        self.initial_seq = None
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((self.dest_ip, self.dest_port))
