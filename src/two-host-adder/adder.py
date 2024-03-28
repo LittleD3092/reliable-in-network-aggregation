@@ -62,10 +62,10 @@ class AdderSender:
         sniff(filter='tcp and src port 1234', prn=handle_pkt, iface="eth0", store=False)
 
     def send(self, num_arr, seq_num = -1):
+        self.initial_seq = None
         if seq_num == -1:
             seq_num = self.seq_num
             self.seq_num += 1
-        self.initial_seq = None
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((self.dest_ip, self.dest_port))
@@ -78,6 +78,7 @@ class AdderSender:
             )
             s.send(payload.build())
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
+            seq_num += 1
 
         s.close()
 
