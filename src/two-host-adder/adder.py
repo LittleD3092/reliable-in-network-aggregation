@@ -49,6 +49,13 @@ class AdderSender:
         self.seq_num = 0
         self.tui = tui
         self.initial_seq = None
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.dest_ip, self.dest_port))
+
+    def __del__(self):
+        self.socket.close()
+
     def listen_for_ack(self):
         def handle_pkt(pkt):
             if pkt.haslayer(TCP) and pkt[TCP].flags & 0x10 and pkt[TCP].flags & 0x03 == 0x00:
@@ -62,13 +69,9 @@ class AdderSender:
         sniff(filter='tcp and src port 1234', prn=handle_pkt, iface="eth0", store=False)
 
     def send(self, num_arr, seq_num = -1):
-        self.initial_seq = None
         if seq_num == -1:
             seq_num = self.seq_num
             self.seq_num += 1
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((self.dest_ip, self.dest_port))
 
         for num in num_arr:
             time.sleep(0.1)
@@ -76,11 +79,9 @@ class AdderSender:
                 A='A', D='D', ver_maj=0x00, ver_min=0x01,
                 seq_num=seq_num, is_result=0x00, num=num
             )
-            s.send(payload.build())
+            self.socket.send(payload.build())
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-
-        s.close()
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
@@ -92,32 +93,37 @@ class AdderReceiver:
         self.port = server_port
         self.tui = tui
         self.server_ip = server_ip
-        
+        self.current_client = 0
+        self.client_capacity = 2
+
     def receive(self):
+        def connection_thread(conn, addr):
+            try:
+                self.tui.print("[SYSTEM] Connection from " + str(addr))
+                while True:
+                    data = conn.recv(1024)
+                    if data:
+                        pkt = Adder(data)
+                        self.tui.print(
+                            "[RECV] seq_num: " + 
+                            str(pkt.seq_num) + 
+                            " num: " + str(pkt.num)
+                        )
+                    else:
+                        self.tui.print("[SYSTEM] No more data from " + str(addr))
+                        break
+            finally:
+                conn.close()
         while True:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tui.print("[SYSTEM] Starting up on " + self.server_ip + " port " + str(self.port))
             s.bind((self.server_ip, self.port))
-            s.listen(1)
+            s.listen(self.client_capacity)
             while True:
-                self.tui.print("[SYSTEM] Waiting for a connection...")
                 conn, addr = s.accept()
-                try:
-                    self.tui.print("[SYSTEM] Connection from " + str(addr))
-                    while True:
-                        data = conn.recv(1024)
-                        if data:
-                            pkt = Adder(data)
-                            self.tui.print(
-                                "[RECV] seq_num: " + 
-                                str(pkt.seq_num) + 
-                                " num: " + str(pkt.num)
-                            )
-                        else:
-                            self.tui.print("[SYSTEM] No more data from " + str(addr))
-                            break
-                finally:
-                    conn.close()
+                self.current_client += 1
+                t = threading.Thread(target=connection_thread, args=(conn, addr))
+                t.start()
     def run_thread(self):
         t = threading.Thread(target=self.receive)
         t.start()
