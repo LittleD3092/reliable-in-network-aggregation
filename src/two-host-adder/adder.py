@@ -51,7 +51,15 @@ class AdderSender:
         self.initial_seq = None
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.dest_ip, self.dest_port))
+
+        while True:
+            try:
+                self.socket.connect((self.dest_ip, self.dest_port))
+                break
+            except:
+                self.tui.print("[SYSTEM] Connection failed. Retrying...")
+                time.sleep(1)
+                continue
 
     def __del__(self):
         self.socket.close()
