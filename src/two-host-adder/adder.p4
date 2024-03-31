@@ -79,7 +79,7 @@ Adder header
 |                              NUM                              |
 +---------------------------------------------------------------+
 */
-//TCPP+IP+ETHENET header
+//TCP+IP+ETHENET header
 /*
  * Standard Ethernet header
  */
@@ -219,7 +219,8 @@ struct Tcp_option_sack_top
  */
 
 struct metadata {
-    /* In our case it is empty */
+    bit<16> tcp_length; // tcp header length using at checksum calculation
+    bit<16> tot_length; // total length with adder header 
 }
 parser Tcp_option_parser(packet_in b,
                          in bit<4> tcp_hdr_data_offset,
@@ -359,6 +360,8 @@ parser MyParser(packet_in packet,
     // }
     state parse_tcp{
         packet.extract(hdr.tcp);
+        meta.tcp_length = (bit<16>)hdr.tcp.data_offset * 4;
+        meta.tot_length = meta.tcp_length + 10;
         Tcp_option_parser.apply(packet, hdr.tcp.data_offset,
                                 hdr.tcp_options_vec, hdr.tcp_options_padding);
         transition check_adder;
@@ -419,18 +422,6 @@ control MyIngress(inout headers hdr,
         // drop the packet
         mark_to_drop(standard_metadata);
     }
-
-    /*action send_ack(bit<9> port, bit<8> is_result) {
-        // send the ack back
-        // hdr.adder.num = num; (remain the same)
-        // hdr.adder.seq_num = seq_num; (remain the same)
-        hdr.adder.is_result = is_result;
-        bit<48> tmp = hdr.ethernet.srcAddr;
-        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-        hdr.ethernet.dstAddr = tmp;
-        hdr.ethernet.etherType = ADDER_ETYPE;
-        standard_metadata.egress_spec = port;
-    }*/
 
     action send_result(bit<9> port) {
         // forward the packet to the destination
@@ -541,13 +532,14 @@ control MyEgress(inout headers hdr,
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
     apply { 
-        bit<16> w = 42;
         update_checksum_with_payload(hdr.adder.isValid(),{
+            //tcp checksum is usually calculated with the following fields
+            //pseudo header+tcp header+tcp payload
             hdr.ipv4.srcAddr,
             hdr.ipv4.dstAddr,
-            8w0,
+            8w0,               //zero padding with protocol
             hdr.ipv4.protocol,
-            w,
+            meta.tot_length,   // 16 bit of tcp length + payload length in bytes
             hdr.tcp.srcPort,
             hdr.tcp.dstPort,
             hdr.tcp.seq_num,
