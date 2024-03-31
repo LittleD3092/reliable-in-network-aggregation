@@ -173,7 +173,7 @@ header_union Tcp_option_h {
 typedef Tcp_option_h[10] Tcp_option_stack;
 
 header Tcp_option_padding_h {
-    varbit<256> padding;
+    varbit<160> padding;
 }
 
 header adder_t {
@@ -237,7 +237,8 @@ parser Tcp_option_parser(packet_in b,
         verify(tcp_hdr_data_offset >= 5, error.TcpDataOffsetTooSmall);
         tcp_hdr_bytes_left = 4 * (bit<7>) (tcp_hdr_data_offset - 5);
         // always true here: 0 <= tcp_hdr_bytes_left <= 40
-        transition next_option;
+        // transition next_option;
+        transition consume_remaining_tcp_hdr_and_accept;
     }
     state next_option {
         transition select(tcp_hdr_bytes_left) {
@@ -539,7 +540,33 @@ control MyEgress(inout headers hdr,
  *************************************************************************/
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
-    apply { }
+    apply { 
+        bit<16> w = 42;
+        update_checksum_with_payload(hdr.adder.isValid(),{
+            hdr.ipv4.srcAddr,
+            hdr.ipv4.dstAddr,
+            8w0,
+            hdr.ipv4.protocol,
+            w,
+            hdr.tcp.srcPort,
+            hdr.tcp.dstPort,
+            hdr.tcp.seq_num,
+            hdr.tcp.ack_num,
+            hdr.tcp.data_offset,
+            hdr.tcp.reserved,
+            hdr.tcp.ctl_flag,
+            hdr.tcp.window_size,
+            hdr.tcp.urgent_num,
+            hdr.tcp_options_padding.padding,
+            hdr.adder.a,
+            hdr.adder.d,
+            hdr.adder.ver_maj,
+            hdr.adder.ver_min,
+            hdr.adder.seq_num,
+            hdr.adder.is_result,
+            hdr.adder.num
+        }, hdr.tcp.checksum, HashAlgorithm.csum16);
+    }
 }
 
 /*************************************************************************
