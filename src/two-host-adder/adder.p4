@@ -23,7 +23,9 @@ const bit<8>  ADDER_VERSION_MINOR = 0x01;
 const bit<48> HOST_1_ADDR         = 0x080000000101;
 const bit<48> HOST_2_ADDR         = 0x080000000102;
 const bit<48> DST_MAC             = 0x080000000103;
-const bit<32> DST_IP              = 0xa0000103;
+const bit<32> HOST_1_IP           = 0x0a000101;
+const bit<32> HOST_2_IP           = 0x0a000102;
+const bit<32> DST_IP              = 0x0a000103;
 const bit<9>  HOST_1_PORT         = 1;
 const bit<9>  HOST_2_PORT         = 2;
 const bit<9>  DST_PORT            = 3;
@@ -401,7 +403,9 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(BUFFER_SIZE) num_buffer;
     register<bit<1>> (BUFFER_SIZE) num_buffer_valid;
     register<bit<9>> (BUFFER_SIZE) num_buffer_author;
-
+    register<bit<16>>(BUFFER_SIZE) num_buffer_tcp_port;         //store tcp port of every host
+    register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_seqnum;       //store tcp seqnum of the first packet
+    register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_acknum;       //store tcp acknum of the first packet
     action save_result(bit<32> result, bit<8> seq_num) {
         // save the result in header
         hdr.adder.num = result;
@@ -417,7 +421,20 @@ control MyIngress(inout headers hdr,
         num_buffer_valid.write(index, 0);
         num_buffer_author.write(index, 0);
     }
-
+    action save_tcp_info(bit<32> index, bit<32> seq_num, bit<32> ack_num) {
+        num_buffer_tcp_seqnum.write(index, seq_num);
+        num_buffer_tcp_acknum.write(index, ack_num);
+    }
+    action modify_tcp(bit<32> seq_num, bit<32> ack_num) {
+        bit<32> tcp_port_index;
+        bit<32> base = 0;
+        bit<16> tcp_port;
+        num_buffer_tcp_port.read(tcp_port, 1);
+        hdr.tcp.srcPort = tcp_port;
+        hdr.tcp.seq_num = seq_num;
+        hdr.tcp.ack_num = ack_num;
+        hdr.ipv4.srcAddr = HOST_1_IP;
+    }
     action drop() {
         // drop the packet
         mark_to_drop(standard_metadata);
@@ -449,11 +466,6 @@ control MyIngress(inout headers hdr,
     }
     apply {
         if (hdr.adder.isValid()) {
-            if(standard_metadata.ingress_port==3){
-                multicast();
-            }
-            else{
-
             // read the number from the register
             bit<32> num;
             bit<1>  valid;
@@ -466,6 +478,8 @@ control MyIngress(inout headers hdr,
             num_buffer_valid.read(valid, index);
             num_buffer_author.read(author, index);
 
+            //store the tcp port of every host
+            num_buffer_tcp_port.write((bit<32>)standard_metadata.ingress_port, hdr.tcp.srcPort);
             // based on valid, determine what to do:
             // 1. if valid == 0, then the register is empty, so we need to
             //    buffer the number and wait for the next packet
@@ -475,20 +489,29 @@ control MyIngress(inout headers hdr,
             if (valid == 0) { 
                 // save the number in the register
                 save_num(index, hdr.adder.num, srcPort);
+                save_tcp_info(index, hdr.tcp.seq_num, hdr.tcp.ack_num);
             }
             // the register is occupied by another host
             else if (valid == 1 && srcPort != author) { 
                 // calculate the result
                 bit<32> result = num + hdr.adder.num;
+                bit<32> host1_tcp_seqnum=hdr.tcp.seq_num;
+                bit<32> host1_tcp_acknum=hdr.tcp.ack_num;
                 // save the result in header and clear the register
                 save_result(result, hdr.adder.seq_num);
+                if(author==1){ //save host 2's tcp info
+                    num_buffer_tcp_seqnum.read(host1_tcp_seqnum, index);
+                    num_buffer_tcp_acknum.read(host1_tcp_acknum, index);
+                }
+                else{
+                }
                 delete_num(index);
+                modify_tcp(host1_tcp_seqnum, host1_tcp_acknum);
                 send_result(DST_PORT);
             }
             else { // the register is occupied by the same host
                 // drop the packet
                 drop();
-            }
             }
         } 
         else {
