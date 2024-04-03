@@ -86,7 +86,7 @@ class AdderSender:
             self.seq_num += 1
 
         for num in num_arr:
-            time.sleep(0.1)
+            time.sleep(1)
             payload = Adder(
                 A='A', D='D', ver_maj=0x00, ver_min=0x01,
                 seq_num=seq_num, is_result=0x00, num=num
@@ -114,7 +114,7 @@ class AdderReceiver:
                 self.tui.print("[SYSTEM] Connection from " + str(addr))
                 while True:
                     data = conn.recv(10)
-                    self.tui.print("[RECV-raw] data: " + str(data))
+                    # self.tui.print("[RECV-raw] data: " + str(data))
                     if data:
                         pkt = Adder(data)
                         self.tui.print(
