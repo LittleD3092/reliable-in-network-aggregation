@@ -24,8 +24,10 @@ from scapy.all import (
 )
 
 import sys
+import os
 import io
 import time
+import re
 from contextlib import contextmanager
 
 class Adder(Packet):
@@ -51,6 +53,8 @@ class AdderSender:
         self.initial_seq = None
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Disable Nagle's algorithm
+        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         while True:
             try:
@@ -109,7 +113,8 @@ class AdderReceiver:
             try:
                 self.tui.print("[SYSTEM] Connection from " + str(addr))
                 while True:
-                    data = conn.recv(1024)
+                    data = conn.recv(10)
+                    self.tui.print("[RECV-raw] data: " + str(data))
                     if data:
                         pkt = Adder(data)
                         self.tui.print(
@@ -196,8 +201,50 @@ class Tui:
 
         self.agent = None
 
+    def boot(self):
+        while True:
+            app = get_app()
+            if app is not None:
+                break
+        ip_host_dict = {
+            '10.0.1.1': 'h1',
+            '10.0.1.2': 'h2',
+            '10.0.1.3': 'h3',
+        }
+        ip = self.get_ip()
+        if ip is None:
+            self.print("[SYSTEM] Error getting IP address. Exiting...")
+            sys.exit(1)
+        rc_filename = ip_host_dict[ip] + ".rc"
+        if not os.path.exists(rc_filename):
+            self.print("[SYSTEM] No rc file \"" + rc_filename + "\" found.")
+        else:
+            self.run_rc_file(rc_filename)
+
+
+    def get_ip(self):
+        try:
+            command_output = os.popen('ip addr show eth0').read()
+            ip_regex = r'inet (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+            match = re.search(ip_regex, command_output)
+            if match:
+                return match.group(1)
+            else:
+                return None
+        except:
+            return None
+
+    def run_rc_file(self, file_path):
+        with open(file_path, 'r') as f:
+            for line in f:
+                command = line.strip()
+                self.accept_input_handler(command)
+
     def accept_input_handler(self, buffer):
-        command = buffer.text.split('> ')[-1]
+        if type(buffer) == str:
+            command = buffer
+        else:
+            command = buffer.text.split('> ')[-1]
         if self.prompt == "[SEND/RECV?] (s/r)> ":
             if command == "s":
                 self.prompt = "[SEND] (num)> "
@@ -208,7 +255,7 @@ class Tui:
                 self.agent = AdderReceiver(self)
                 self.agent.run_thread()
             else:
-                self.print("Invalid command")
+                self.print("Invalid command: " + command)
         elif self.prompt == "[SEND] (num)> ":
             num_arr = parse_num(command)
             self.agent.send(num_arr)
@@ -217,7 +264,10 @@ class Tui:
             parsed_cmd = command.split(' ')
             if parsed_cmd[0] == "echo":
                 self.print(parsed_cmd[1])
-        self.sync_prompt(buffer=buffer)
+        if type(buffer) != str:
+            self.sync_prompt(buffer=buffer)
+        else:
+            self.sync_prompt(buffer=self.input_text_area.buffer)
 
     def sync_prompt(self, buffer):
         def print_prompt():
@@ -241,6 +291,8 @@ class Tui:
 
 
     def run(self):
+        boot_thread = threading.Thread(target=self.boot)
+        boot_thread.start()
         self.app.run()
 
 def parse_num(num):
