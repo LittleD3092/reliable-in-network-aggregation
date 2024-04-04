@@ -50,7 +50,7 @@ class AdderSender:
         self.dest_port = dest_port
         self.seq_num = 0
         self.tui = tui
-        self.initial_seq = None
+        self.initial_ack = None
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
@@ -71,9 +71,9 @@ class AdderSender:
     def listen_for_ack(self):
         def handle_pkt(pkt):
             if pkt.haslayer(TCP) and pkt[TCP].flags & 0x10 and pkt[TCP].flags & 0x03 == 0x00:
-                if self.initial_seq is None:
-                    self.initial_seq = pkt[TCP].seq
-                relative_seq = pkt[TCP].seq - self.initial_seq
+                if self.initial_ack is None:
+                    self.initial_ack = pkt[TCP].ack
+                relative_seq = (pkt[TCP].ack - self.initial_ack) // 10
                 self.tui.print("[ACK] seq_num: " + str(relative_seq))
             else:
                 return
