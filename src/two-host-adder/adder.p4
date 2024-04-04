@@ -595,7 +595,25 @@ control MyEgress(inout headers hdr,
  *************************************************************************/
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
-    apply { 
+    apply {
+        update_checksum(
+            hdr.ipv4.isValid(),  // condition: true if IPv4 header is valid
+            {
+                hdr.ipv4.version, 
+                hdr.ipv4.ihl, 
+                hdr.ipv4.diffserv, 
+                hdr.ipv4.totalLen,
+                hdr.ipv4.identification, 
+                hdr.ipv4.flags, 
+                hdr.ipv4.fragOffset,
+                hdr.ipv4.ttl, 
+                hdr.ipv4.protocol, 
+                hdr.ipv4.srcAddr, 
+                hdr.ipv4.dstAddr
+            },
+            hdr.ipv4.hdrChecksum,  // field to update with computed checksum
+            HashAlgorithm.csum16  // checksum algorithm
+        );
         update_checksum_with_payload(hdr.adder.isValid(),{
             //tcp checksum is usually calculated with the following fields
             //pseudo header+tcp header+tcp payload
