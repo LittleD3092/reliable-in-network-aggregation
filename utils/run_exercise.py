@@ -74,6 +74,10 @@ class ExerciseTopo(Topo):
         host_links = []
         switch_links = []
 
+        # log the topology
+        with open('%s/topology.log' % log_dir, 'w') as f:
+            f.write(json.dumps({'hosts': hosts, 'switches': switches, 'links': links}, indent=4))
+
         # assumes host always comes first for host<-->switch links
         for link in links:
             if link['node1'][0] == 'h':
