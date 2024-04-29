@@ -7,6 +7,7 @@ from prompt_toolkit.widgets import TextArea, Frame
 from prompt_toolkit.application import get_app
 
 import threading
+import struct
 
 from scapy.all import (
     IntField,
@@ -30,18 +31,6 @@ import time
 import re
 from contextlib import contextmanager
 
-class Adder(Packet):
-    name = "adder"
-    fields_desc = [ StrFixedLenField("A", "A", length=1),
-                    StrFixedLenField("D", "D", length=1),
-                    XByteField("ver_maj", 0x00),
-                    XByteField("ver_min", 0x01),
-                    XByteField("seq_num", 0x00),
-                    XByteField("is_result", 0x00),
-                    IntField("num", 0x00) ]
-
-bind_layers(TCP, Adder, dport=1234)
-
 class AdderSender:
     def __init__(self, tui, dest_ip = '10.0.1.3', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:03'):
         self.src_port = src_port
@@ -51,6 +40,10 @@ class AdderSender:
         self.seq_num = 0
         self.tui = tui
         self.initial_ack = None
+
+        self.header_size = 66 # bytes
+        self.packet_size = 1024 # bytes
+        self.payload_size = self.packet_size - self.header_size
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
@@ -73,7 +66,7 @@ class AdderSender:
             if pkt.haslayer(TCP) and pkt[TCP].flags & 0x10 and pkt[TCP].flags & 0x03 == 0x00:
                 if self.initial_ack is None:
                     self.initial_ack = pkt[TCP].ack
-                relative_seq = (pkt[TCP].ack - self.initial_ack) // 10
+                relative_seq = (pkt[TCP].ack - self.initial_ack) // self.payload_size
                 self.tui.print("[ACK] seq_num: " + str(relative_seq))
             else:
                 return
@@ -86,11 +79,8 @@ class AdderSender:
             self.seq_num += 1
 
         for num in num_arr:
-            payload = Adder(
-                A='A', D='D', ver_maj=0x00, ver_min=0x01,
-                seq_num=seq_num, is_result=0x00, num=num
-            )
-            self.socket.send(payload.build())
+            payload = struct.pack('>I', num) + b'\x00' * (self.payload_size - 4)
+            self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
             time.sleep(0.5)
@@ -108,20 +98,24 @@ class AdderReceiver:
         self.current_client = 0
         self.client_capacity = 2
 
+        self.packet_size = 1024 # bytes
+        self.header_size = 66 # bytes
+        self.payload_size = self.packet_size - self.header_size
+
     def receive(self):
         def connection_thread(conn, addr):
             try:
                 self.tui.print("[SYSTEM] Connection from " + str(addr))
                 while True:
-                    data = conn.recv(10)
+                    data = conn.recv(self.payload_size)
                     # self.tui.print("[RECV-raw] data: " + str(data))
                     if data:
-                        pkt = Adder(data)
-                        self.tui.print(
-                            "[RECV] seq_num: " + 
-                            str(pkt.seq_num) + 
-                            " num: " + str(pkt.num)
-                        )
+                        try:
+                            num = struct.unpack('>I', data[:4])[0]
+                            self.tui.print("[RECV] num: " + str(num))
+                        except struct.error:
+                            self.tui.print("[SYSTEM] Error unpacking data.")
+                            self.tui.print("         data: " + str(data[:4]))
                     else:
                         self.tui.print("[SYSTEM] No more data from " + str(addr))
                         break
@@ -250,10 +244,12 @@ class Tui:
                 self.prompt = "[SEND] (num)> "
                 self.agent = AdderSender(self, '10.0.1.3')
                 self.agent.run_thread()
+                time.sleep(0.05)
             elif command == "r":
                 self.prompt = "[RECV]> "
                 self.agent = AdderReceiver(self)
                 self.agent.run_thread()
+                time.sleep(0.05)
             else:
                 self.print("Invalid command: " + command)
         elif self.prompt == "[SEND] (num)> ":
