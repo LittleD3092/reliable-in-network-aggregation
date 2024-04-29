@@ -83,7 +83,7 @@ class AdderSender:
             self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-            time.sleep(0.5)
+            time.sleep(0.01)
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
