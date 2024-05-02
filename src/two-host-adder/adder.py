@@ -42,7 +42,7 @@ class AdderSender:
         self.initial_ack = None
 
         self.header_size = 66 # bytes
-        self.packet_size = 1024 # bytes
+        self.packet_size = 1090 # bytes
         self.payload_size = self.packet_size - self.header_size
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,7 +83,7 @@ class AdderSender:
             self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-            time.sleep(0.01)
+            time.sleep(0.5)
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
@@ -98,7 +98,7 @@ class AdderReceiver:
         self.current_client = 0
         self.client_capacity = 2
 
-        self.packet_size = 1024 # bytes
+        self.packet_size = 1090 # bytes
         self.header_size = 66 # bytes
         self.payload_size = self.packet_size - self.header_size
 
