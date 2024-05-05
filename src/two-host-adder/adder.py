@@ -45,7 +45,7 @@ class AdderSender:
         self.packet_size = 1514 # bytes
         self.payload_size = self.packet_size - self.header_size
 
-        self.max_window_size = 42496 # bytes
+        self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
 
@@ -109,7 +109,7 @@ class AdderReceiver:
         self.header_size = 66 # bytes
         self.payload_size = self.packet_size - self.header_size
 
-        self.max_window_size = 42496 # bytes
+        self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
 
