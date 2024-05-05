@@ -1,3 +1,4 @@
+
 /* -*- P4_16 -*- */
 /*
  * Define the headers the program will recognize
@@ -401,9 +402,6 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(5)  init_seq_num;
     register<bit<1>> (5)  init_seq_num_valid;
     register<bit<16>>(5)  host_tcp_port;         //store tcp port of every host
-
-    register<bit<32>>(65536) h1_seq_buffer;
-    register<bit<32>>(65536) h2_seq_buffer;
     register<bit<32>>(BUFFER_SIZE) num_buffer;
     register<bit<1>> (BUFFER_SIZE) num_buffer_valid;
     register<bit<9>> (BUFFER_SIZE) num_buffer_author;
@@ -497,10 +495,7 @@ control MyIngress(inout headers hdr,
             if(h1_valid==1 && h2_valid==1){
                 bit<32> ini_seq_num;
                 init_seq_num.read(ini_seq_num,1);
-                // bit<32> relative_seq_num=((hdr.tcp.ack_num-ini_seq_num)>>10);
-                bit<32> seq_num_diff=((hdr.tcp.ack_num-ini_seq_num)>>3);
-                bit<32> relative_seq_num;
-                h1_seq_buffer.read(relative_seq_num, seq_num_diff);
+                bit<32> relative_seq_num=((hdr.tcp.ack_num-ini_seq_num)>>10);
                 if(relative_seq_num>0){
                     meta.ack_valid=1;
                     meta.tcp_nop=0x01;
@@ -528,26 +523,11 @@ control MyIngress(inout headers hdr,
                 init_seq_num.write((bit<32>)in_port, hdr.tcp.seq_num);
                 init_seq_num_valid.write((bit<32>)in_port, 1);
                 host_tcp_port.write((bit<32>)in_port, hdr.tcp.srcPort);
-                if(in_port==1){
-                    h1_seq_buffer.write(0, 1);
-                }
-                else if(in_port==2){
-                    h2_seq_buffer.write(0, 1);
-                }
                 relative_seq_num=1;
             }
             else{
                 init_seq_num.read(seq_num,(bit<32>)in_port);
-                bit<32> seq_num_diff=((hdr.tcp.seq_num-seq_num)>>3);
-                if(in_port==1){
-                    h1_seq_buffer.read(relative_seq_num,seq_num_diff-181);
-                    h1_seq_buffer.write(seq_num_diff, relative_seq_num+1);
-                }
-                else if(in_port==2){
-                    h2_seq_buffer.read(relative_seq_num,seq_num_diff-181);
-                    h2_seq_buffer.write(seq_num_diff, relative_seq_num+1);
-                }
-                relative_seq_num=relative_seq_num+1;
+                relative_seq_num=((hdr.tcp.seq_num-seq_num)>>10)+1;
             }
             //number buffer operation
             bit<1>  buffer_valid;
@@ -621,10 +601,9 @@ control MyEgress(inout headers hdr,
     apply {
         if(standard_metadata.egress_port==standard_metadata.ingress_port){
             drop();
-           
         }
         if(meta.ack_valid==1&&standard_metadata.egress_port==2){
-            hdr.tcp.ack_num = meta.h2_tcp_seqnum+1448;
+            hdr.tcp.ack_num = meta.h2_tcp_seqnum+1024;
             hdr.tcp.seq_num = meta.h2_tcp_acknum;
             hdr.tcp.dstPort = meta.h2_tcp_port;
             meta.tcp_ts_ts_val = meta.tcp_ts_ts_val+20;
