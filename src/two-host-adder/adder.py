@@ -42,12 +42,14 @@ class AdderSender:
         self.initial_ack = None
 
         self.header_size = 66 # bytes
-        self.packet_size = 1514 # bytes
+        self.packet_size = 1090 # bytes
         self.payload_size = self.packet_size - self.header_size
 
         self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
+
+        self.mss = self.payload_size + 12 # Not sure why 12
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
@@ -55,6 +57,8 @@ class AdderSender:
         # Set the window size
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+        # Set MSS
+        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
         while True:
             try:
@@ -105,13 +109,15 @@ class AdderReceiver:
         self.current_client = 0
         self.client_capacity = 2
 
-        self.packet_size = 1514 # bytes
+        self.packet_size = 1090 # bytes
         self.header_size = 66 # bytes
         self.payload_size = self.packet_size - self.header_size
 
         self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
+
+        self.mss = self.payload_size + 12 # Not sure why 12
 
     def receive(self):
         def connection_thread(conn, addr):
@@ -138,6 +144,9 @@ class AdderReceiver:
             # Set the window size
             s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+
+            # Set MSS
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
             self.tui.print("[SYSTEM] Starting up on " + self.server_ip + " port " + str(self.port))
             s.bind((self.server_ip, self.port))
