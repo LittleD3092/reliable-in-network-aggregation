@@ -45,9 +45,16 @@ class AdderSender:
         self.packet_size = 1514 # bytes
         self.payload_size = self.packet_size - self.header_size
 
+        self.max_window_size = 42496 # bytes
+        self.packet_in_window = self.max_window_size // self.payload_size
+        self.window_size = self.payload_size * self.packet_in_window
+
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        # Set the window size
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
 
         while True:
             try:
@@ -102,6 +109,10 @@ class AdderReceiver:
         self.header_size = 66 # bytes
         self.payload_size = self.packet_size - self.header_size
 
+        self.max_window_size = 42496 # bytes
+        self.packet_in_window = self.max_window_size // self.payload_size
+        self.window_size = self.payload_size * self.packet_in_window
+
     def receive(self):
         def connection_thread(conn, addr):
             try:
@@ -123,6 +134,11 @@ class AdderReceiver:
                 conn.close()
         while True:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            
+            # Set the window size
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+
             self.tui.print("[SYSTEM] Starting up on " + self.server_ip + " port " + str(self.port))
             s.bind((self.server_ip, self.port))
             s.listen(self.client_capacity)
