@@ -312,6 +312,9 @@ class Tui:
 
 
     def run(self):
+        # Disable timestamps using sysctl
+        os.system("sysctl -w net.ipv4.tcp_timestamps=0")
+
         boot_thread = threading.Thread(target=self.boot)
         boot_thread.start()
         self.app.run()
