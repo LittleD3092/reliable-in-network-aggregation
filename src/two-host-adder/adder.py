@@ -41,15 +41,15 @@ class AdderSender:
         self.tui = tui
         self.initial_ack = None
 
-        self.header_size = 66 # bytes
-        self.packet_size = 1090 # bytes
+        self.header_size = 54 # bytes
+        self.packet_size = 1078 # bytes
         self.payload_size = self.packet_size - self.header_size
 
         self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
 
-        self.mss = self.payload_size + 12 # Not sure why 12
+        self.mss = self.payload_size
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
@@ -109,15 +109,15 @@ class AdderReceiver:
         self.current_client = 0
         self.client_capacity = 2
 
-        self.packet_size = 1090 # bytes
-        self.header_size = 66 # bytes
+        self.packet_size = 1078 # bytes
+        self.header_size = 54 # bytes
         self.payload_size = self.packet_size - self.header_size
 
         self.max_window_size = 65535 # bytes
         self.packet_in_window = self.max_window_size // self.payload_size
         self.window_size = self.payload_size * self.packet_in_window
 
-        self.mss = self.payload_size + 12 # Not sure why 12
+        self.mss = self.payload_size
 
     def receive(self):
         def connection_thread(conn, addr):
