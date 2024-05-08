@@ -299,17 +299,13 @@ parser Tcp_option_parser(packet_in b,
     }
     state parse_tcp_option_sack {
         bit<8> n_sack_bytes = b.lookahead<Tcp_option_sack_top>().length;
-        // I do not have global knowledge of all TCP SACK
-        // implementations, but from reading the RFC, it appears that
-        // the only SACK option lengths that are legal are 2+8*n for
-        // n=1, 2, 3, or 4, so set an error if anything else is seen.
         verify(n_sack_bytes == 10 || n_sack_bytes == 18 ||
                n_sack_bytes == 26 || n_sack_bytes == 34,
                error.TcpBadSackOptionLength);
         verify(tcp_hdr_bytes_left >= (bit<7>) n_sack_bytes,
                error.TcpOptionTooLongForHeader);
         tcp_hdr_bytes_left = tcp_hdr_bytes_left - (bit<7>) n_sack_bytes;
-        b.extract(vec.next.sack, (bit<32>) (8 * n_sack_bytes - 16));
+        b.extract(vec.next.sack, (bit<32>) (8 * (bit<32>)n_sack_bytes - 16));
         transition next_option;
     }
     state parse_tcp_option_ts {
