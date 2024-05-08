@@ -225,10 +225,10 @@ struct metadata {
     bit<16> h2_tcp_port;
     bit<1>  ack_valid;
     bit<8>  tcp_nop;
-    bit<8>  tcp_ts;
-    bit<8>  tcp_ts_len;
-    bit<32> tcp_ts_ts_val;
-    bit<32> tcp_ts_ts_ecr;
+    // bit<8>  tcp_ts;
+    // bit<8>  tcp_ts_len;
+    // bit<32> tcp_ts_ts_val;
+    // bit<32> tcp_ts_ts_ecr;
 }
 parser Tcp_option_parser(packet_in b,
                          in bit<4> tcp_hdr_data_offset,
@@ -407,14 +407,14 @@ control MyIngress(inout headers hdr,
     register<bit<9>> (BUFFER_SIZE) num_buffer_author;
     register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_seqnum;       //store tcp seqnum of the first packet
     register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_acknum;       //store tcp acknum of the first packet
-    register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_ts_val;       //store tcp ts_val of the first packet(mainly host 2)
-    register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_ts_ecr;       //store tcp ts_ecr of the first packet(mainly host 2
+    // register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_ts_val;       //store tcp ts_val of the first packet(mainly host 2)
+    // register<bit<32>>(BUFFER_SIZE) num_buffer_tcp_ts_ecr;       //store tcp ts_ecr of the first packet(mainly host 2
 
 
     register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_seqnum;      //store tcp seqnum of the second packet for ack
     register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_acknum;      //store tcp acknum of the second packet for ack
-    register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_ts_val;
-    register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_ts_ecr;
+    // register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_ts_val;
+    // register<bit<32>>(BUFFER_SIZE) packet_buffer_tcp_ts_ecr;
     register<bit<1>> (BUFFER_SIZE) packet_buffer_packet_valid;
     action save_result(bit<32> result) {
         hdr.adder.num = result;
@@ -429,35 +429,35 @@ control MyIngress(inout headers hdr,
     //     num_buffer_valid.write(index, 0);
     //     num_buffer_author.write(index, 0);
     // }
-    action save_tcp_info(bit<32> index, bit<32> seq_num, bit<32> ack_num, bit<32> ts_val, bit<32> ts_ecr) {
+    action save_tcp_info(bit<32> index, bit<32> seq_num, bit<32> ack_num) {
         num_buffer_tcp_seqnum.write(index, seq_num);
         num_buffer_tcp_acknum.write(index, ack_num);
-        num_buffer_tcp_ts_val.write(index, ts_val);
-        num_buffer_tcp_ts_ecr.write(index, ts_ecr);
+        // num_buffer_tcp_ts_val.write(index, ts_val);
+        // num_buffer_tcp_ts_ecr.write(index, ts_ecr);
     }
     action save_tcp_option_to_meta(){
-        meta.tcp_nop = 0x01;
-        meta.tcp_ts = 0x08;
-        meta.tcp_ts_len = 0x0a;
-        meta.tcp_ts_ts_val = hdr.tcp_options_vec[2].ts.ts_val;
-        meta.tcp_ts_ts_ecr = hdr.tcp_options_vec[2].ts.ts_ecr;
+        // meta.tcp_nop = 0x01;
+        // meta.tcp_ts = 0x08;
+        // meta.tcp_ts_len = 0x0a;
+        // meta.tcp_ts_ts_val = hdr.tcp_options_vec[2].ts.ts_val;
+        // meta.tcp_ts_ts_ecr = hdr.tcp_options_vec[2].ts.ts_ecr;
     }
-    action save_packet_tcp_info(bit<32> index, bit<32> seq_num, bit<32> ack_num, bit<32> ts_val, bit<32> ts_ecr) {
+    action save_packet_tcp_info(bit<32> index, bit<32> seq_num, bit<32> ack_num) {
         packet_buffer_tcp_seqnum.write(index, seq_num);
         packet_buffer_tcp_acknum.write(index, ack_num);
-        packet_buffer_tcp_ts_val.write(index, ts_val);
-        packet_buffer_tcp_ts_ecr.write(index, ts_ecr);
+        // packet_buffer_tcp_ts_val.write(index, ts_val);
+        // packet_buffer_tcp_ts_ecr.write(index, ts_ecr);
         packet_buffer_packet_valid.write(index, 1);
     }
-    action modify_tcp(bit<32> seq_num, bit<32> ack_num, bit<32> ts_val, bit<32> ts_ecr) {
+    action modify_tcp(bit<32> seq_num, bit<32> ack_num) {
         host_tcp_port.read(hdr.tcp.srcPort, 1);
         hdr.tcp.seq_num = seq_num;
         hdr.tcp.ack_num = ack_num;
-        hdr.tcp_options_vec[2].ts.ts_val = ts_val;
-        hdr.tcp_options_vec[2].ts.ts_ecr = ts_ecr;
+        // hdr.tcp_options_vec[2].ts.ts_val = ts_val;
+        // hdr.tcp_options_vec[2].ts.ts_ecr = ts_ecr;
         hdr.ipv4.srcAddr = HOST_1_IP;
-        meta.tcp_ts_ts_val = ts_val;
-        meta.tcp_ts_ts_ecr = ts_ecr;
+        // meta.tcp_ts_ts_val = ts_val;
+        // meta.tcp_ts_ts_ecr = ts_ecr;
     }
     action drop() {
         // drop the packet
@@ -499,13 +499,13 @@ control MyIngress(inout headers hdr,
                 if(relative_seq_num>0){
                     meta.ack_valid=1;
                     meta.tcp_nop=0x01;
-                    meta.tcp_ts=0x08;
-                    meta.tcp_ts_len=0x0a;
+                    // meta.tcp_ts=0x08;
+                    // meta.tcp_ts_len=0x0a;
                     // meta.tcp_ts_ts_val=hdr.tcp_options_vec[2].ts.ts_val;
                     packet_buffer_tcp_seqnum.read(meta.h2_tcp_seqnum, relative_seq_num);
                     packet_buffer_tcp_acknum.read(meta.h2_tcp_acknum, relative_seq_num);
-                    packet_buffer_tcp_ts_val.read(meta.tcp_ts_ts_ecr, relative_seq_num);
-                    packet_buffer_tcp_ts_ecr.read(meta.tcp_ts_ts_val, relative_seq_num);
+                    // packet_buffer_tcp_ts_val.read(meta.tcp_ts_ts_ecr, relative_seq_num);
+                    // packet_buffer_tcp_ts_ecr.read(meta.tcp_ts_ts_val, relative_seq_num);
                     host_tcp_port.read(meta.h2_tcp_port ,2);
                     multicast();
                 }        
@@ -538,43 +538,43 @@ control MyIngress(inout headers hdr,
             num_buffer.read(num, relative_seq_num);
             if(buffer_valid==0){
                 save_num(relative_seq_num, hdr.adder.num, in_port);
-                save_tcp_info(relative_seq_num, hdr.tcp.seq_num, hdr.tcp.ack_num, hdr.tcp_options_vec[2].ts.ts_val, hdr.tcp_options_vec[2].ts.ts_ecr);
+                save_tcp_info(relative_seq_num, hdr.tcp.seq_num, hdr.tcp.ack_num);
                 drop();
             }
             else if(buffer_valid==1 && author!=in_port){
                 bit<32> result=num+hdr.adder.num;
                 bit<32> host1_tcp_seqnum;
                 bit<32> host1_tcp_acknum;
-                bit<32> host1_tcp_ts_val;
-                bit<32> host1_tcp_ts_ecr;
+                // bit<32> host1_tcp_ts_val;
+                // bit<32> host1_tcp_ts_ecr;
                 save_result(result);
                 save_tcp_option_to_meta();
                 if(author==1){
                     num_buffer_tcp_seqnum.read(host1_tcp_seqnum, relative_seq_num);
                     num_buffer_tcp_acknum.read(host1_tcp_acknum, relative_seq_num);
-                    num_buffer_tcp_ts_val.read(host1_tcp_ts_val, relative_seq_num);
-                    num_buffer_tcp_ts_ecr.read(host1_tcp_ts_ecr, relative_seq_num);
-                    save_packet_tcp_info(relative_seq_num, hdr.tcp.seq_num, hdr.tcp.ack_num, hdr.tcp_options_vec[2].ts.ts_val, hdr.tcp_options_vec[2].ts.ts_ecr);
+                    // num_buffer_tcp_ts_val.read(host1_tcp_ts_val, relative_seq_num);
+                    // num_buffer_tcp_ts_ecr.read(host1_tcp_ts_ecr, relative_seq_num);
+                    save_packet_tcp_info(relative_seq_num, hdr.tcp.seq_num, hdr.tcp.ack_num);
                 }
                 else{//host2 arrives first. now in hdr is host1's packet
                     host1_tcp_seqnum=hdr.tcp.seq_num;
                     host1_tcp_acknum=hdr.tcp.ack_num;
-                    host1_tcp_ts_val=hdr.tcp_options_vec[2].ts.ts_val;
-                    host1_tcp_ts_ecr=hdr.tcp_options_vec[2].ts.ts_ecr;
+                    // host1_tcp_ts_val=hdr.tcp_options_vec[2].ts.ts_val;
+                    // host1_tcp_ts_ecr=hdr.tcp_options_vec[2].ts.ts_ecr;
                     bit<32> host2_tcp_seqnum;
                     bit<32> host2_tcp_acknum;
-                    bit<32> host2_tcp_ts_val;
-                    bit<32> host2_tcp_ts_ecr;
+                    // bit<32> host2_tcp_ts_val;
+                    // bit<32> host2_tcp_ts_ecr;
                     num_buffer_tcp_seqnum.read(host2_tcp_seqnum, relative_seq_num);
                     num_buffer_tcp_acknum.read(host2_tcp_acknum, relative_seq_num);
-                    num_buffer_tcp_ts_val.read(host2_tcp_ts_val, relative_seq_num);
-                    num_buffer_tcp_ts_ecr.read(host2_tcp_ts_ecr, relative_seq_num);
+                    // num_buffer_tcp_ts_val.read(host2_tcp_ts_val, relative_seq_num);
+                    // num_buffer_tcp_ts_ecr.read(host2_tcp_ts_ecr, relative_seq_num);
                     packet_buffer_tcp_seqnum.write(relative_seq_num, host2_tcp_seqnum);
                     packet_buffer_tcp_acknum.write(relative_seq_num, host2_tcp_acknum);
-                    packet_buffer_tcp_ts_val.write(relative_seq_num, host2_tcp_ts_val);
-                    packet_buffer_tcp_ts_ecr.write(relative_seq_num, host2_tcp_ts_ecr);
+                    // packet_buffer_tcp_ts_val.write(relative_seq_num, host2_tcp_ts_val);
+                    // packet_buffer_tcp_ts_ecr.write(relative_seq_num, host2_tcp_ts_ecr);
                 }
-                modify_tcp(host1_tcp_seqnum, host1_tcp_acknum,host1_tcp_ts_val,host1_tcp_ts_ecr);
+                modify_tcp(host1_tcp_seqnum, host1_tcp_acknum);
                 send_result(DST_PORT);
                 // ipv4_lookup.apply();
             }
@@ -606,18 +606,18 @@ control MyEgress(inout headers hdr,
             hdr.tcp.ack_num = meta.h2_tcp_seqnum+1024;
             hdr.tcp.seq_num = meta.h2_tcp_acknum;
             hdr.tcp.dstPort = meta.h2_tcp_port;
-            meta.tcp_ts_ts_val = meta.tcp_ts_ts_val+20;
+            // meta.tcp_ts_ts_val = meta.tcp_ts_ts_val+20;
             meta.h2_tcp_acknum=hdr.tcp.ack_num;
             meta.h2_tcp_seqnum=hdr.tcp.seq_num;
-            hdr.tcp_options_vec[2].ts.ts_val = meta.tcp_ts_ts_val;
-            hdr.tcp_options_vec[2].ts.ts_ecr = meta.tcp_ts_ts_ecr;
+            // hdr.tcp_options_vec[2].ts.ts_val = meta.tcp_ts_ts_val;
+            // hdr.tcp_options_vec[2].ts.ts_ecr = meta.tcp_ts_ts_ecr;
             hdr.ipv4.dstAddr = HOST_2_IP;
             hdr.ethernet.dstAddr = HOST_2_ADDR;
         }
-        if(meta.ack_valid==1&&standard_metadata.egress_port==1){
-            meta.tcp_ts_ts_val = hdr.tcp_options_vec[2].ts.ts_val;
-            meta.tcp_ts_ts_ecr = hdr.tcp_options_vec[2].ts.ts_ecr;
-        }
+        // if(meta.ack_valid==1&&standard_metadata.egress_port==1){
+        //     meta.tcp_ts_ts_val = hdr.tcp_options_vec[2].ts.ts_val;
+        //     meta.tcp_ts_ts_ecr = hdr.tcp_options_vec[2].ts.ts_ecr;
+        // }
     }
 }
 
@@ -662,12 +662,12 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
             hdr.tcp.ctl_flag,
             hdr.tcp.window_size,
             hdr.tcp.urgent_num,
-            meta.tcp_nop,
-            meta.tcp_nop,
-            meta.tcp_ts,
-            meta.tcp_ts_len,
-            meta.tcp_ts_ts_val,
-            meta.tcp_ts_ts_ecr,
+            // meta.tcp_nop,
+            // meta.tcp_nop,
+            // meta.tcp_ts,
+            // meta.tcp_ts_len,
+            // meta.tcp_ts_ts_val,
+            // meta.tcp_ts_ts_ecr,
             hdr.tcp_options_padding.padding,
             hdr.adder.num
         }, hdr.tcp.checksum, HashAlgorithm.csum16);
@@ -686,12 +686,12 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
             hdr.tcp.ctl_flag,
             hdr.tcp.window_size,
             hdr.tcp.urgent_num,
-            meta.tcp_nop,
-            meta.tcp_nop,
-            meta.tcp_ts,
-            meta.tcp_ts_len,
-            meta.tcp_ts_ts_val,
-            meta.tcp_ts_ts_ecr,
+            // meta.tcp_nop,
+            // meta.tcp_nop,
+            // meta.tcp_ts,
+            // meta.tcp_ts_len,
+            // meta.tcp_ts_ts_val,
+            // meta.tcp_ts_ts_ecr,
             hdr.tcp_options_padding.padding
         }, hdr.tcp.checksum, HashAlgorithm.csum16);
     }
