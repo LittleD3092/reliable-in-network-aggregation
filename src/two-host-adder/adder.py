@@ -41,13 +41,24 @@ class AdderSender:
         self.tui = tui
         self.initial_ack = None
 
-        self.header_size = 66 # bytes
-        self.packet_size = 1024 # bytes
+        self.header_size = 54 # bytes
+        self.packet_size = 1078 # bytes
         self.payload_size = self.packet_size - self.header_size
+
+        self.max_window_size = 65535 # bytes
+        self.packet_in_window = self.max_window_size // self.payload_size
+        self.window_size = self.payload_size * self.packet_in_window
+
+        self.mss = self.payload_size
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Disable Nagle's algorithm
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        # Set the window size
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+        # Set MSS
+        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
         while True:
             try:
@@ -83,7 +94,7 @@ class AdderSender:
             self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-            time.sleep(0.5)
+            time.sleep(0.001)
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
@@ -98,9 +109,15 @@ class AdderReceiver:
         self.current_client = 0
         self.client_capacity = 2
 
-        self.packet_size = 1024 # bytes
-        self.header_size = 66 # bytes
+        self.packet_size = 1078 # bytes
+        self.header_size = 54 # bytes
         self.payload_size = self.packet_size - self.header_size
+
+        self.max_window_size = 65535 # bytes
+        self.packet_in_window = self.max_window_size // self.payload_size
+        self.window_size = self.payload_size * self.packet_in_window
+
+        self.mss = self.payload_size
 
     def receive(self):
         def connection_thread(conn, addr):
@@ -123,6 +140,14 @@ class AdderReceiver:
                 conn.close()
         while True:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            
+            # Set the window size
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+
+            # Set MSS
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
+
             self.tui.print("[SYSTEM] Starting up on " + self.server_ip + " port " + str(self.port))
             s.bind((self.server_ip, self.port))
             s.listen(self.client_capacity)
@@ -287,6 +312,9 @@ class Tui:
 
 
     def run(self):
+        # Disable timestamps using sysctl
+        os.system("sysctl -w net.ipv4.tcp_timestamps=0")
+
         boot_thread = threading.Thread(target=self.boot)
         boot_thread.start()
         self.app.run()
