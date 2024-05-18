@@ -533,6 +533,9 @@ control MyIngress(inout headers hdr,
                 hdr.ethernet.srcAddr=HOST_1_ADDR;
                 standard_metadata.egress_spec=5;
             }
+            else{
+                drop();
+            }
         }
         else{
             ipv4_lookup.apply();
