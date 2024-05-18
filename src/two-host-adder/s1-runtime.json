@@ -35,6 +35,28 @@
         "dstAddr": "08:00:00:00:01:03",
         "port": 3
       }
+    },
+    {
+      "table": "MyIngress.ipv4_lookup",
+      "match": {
+        "hdr.ipv4.dstAddr": ["10.0.1.4", 32]
+      },
+      "action_name": "MyIngress.ipv4_forward",
+      "action_params": {
+        "dstAddr": "08:00:00:00:01:04",
+        "port": 4
+      }
+    },
+    {
+      "table": "MyIngress.ipv4_lookup",
+      "match": {
+        "hdr.ipv4.dstAddr": ["10.0.1.5", 32]
+      },
+      "action_name": "MyIngress.ipv4_forward",
+      "action_params": {
+        "dstAddr": "08:00:00:00:01:05",
+        "port": 5
+      }
     }
   ],
   "multicast_group_entries" : [
@@ -51,6 +73,14 @@
         },
         {
           "egress_port" : 3,
+          "instance" : 1
+        },
+        {
+          "egress_port" : 4,
+          "instance" : 1
+        },
+        {
+          "egress_port" : 5,
           "instance" : 1
         }
       ]

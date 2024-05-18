@@ -32,7 +32,7 @@ import re
 from contextlib import contextmanager
 
 class AdderSender:
-    def __init__(self, tui, dest_ip = '10.0.1.3', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:03'):
+    def __init__(self, tui, dest_ip = '10.0.1.5', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:05'):
         self.src_port = src_port
         self.dest_mac = dest_mac
         self.dest_ip = dest_ip
@@ -101,7 +101,7 @@ class AdderSender:
         t.start()
 
 class AdderReceiver:
-    def __init__(self, tui, server_ip = '10.0.1.3', server_port = 1234, filter='port 1234'):
+    def __init__(self, tui, server_ip = '10.0.1.5', server_port = 1234, filter='port 1234'):
         self.filter = filter
         self.port = server_port
         self.tui = tui
@@ -229,6 +229,8 @@ class Tui:
             '10.0.1.1': 'h1',
             '10.0.1.2': 'h2',
             '10.0.1.3': 'h3',
+            '10.0.1.4': 'h4',
+            '10.0.1.5': 'h5'            
         }
         ip = self.get_ip()
         if ip is None:
@@ -267,7 +269,7 @@ class Tui:
         if self.prompt == "[SEND/RECV?] (s/r)> ":
             if command == "s":
                 self.prompt = "[SEND] (num)> "
-                self.agent = AdderSender(self, '10.0.1.3')
+                self.agent = AdderSender(self, '10.0.1.5')
                 self.agent.run_thread()
                 time.sleep(0.05)
             elif command == "r":
