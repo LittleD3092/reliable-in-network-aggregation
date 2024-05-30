@@ -34,7 +34,7 @@ const bit<9>  HOST_4_PORT         = 4;
 const bit<9>  DST_PORT            = 5;
 
 // buffer size
-const bit<32> BUFFER_SIZE         = 4;
+const bit<32> BUFFER_SIZE         = 128;
 
 /*
         1               2               3               4
@@ -568,7 +568,7 @@ control MyIngress(inout headers hdr,
                     init_seq_num.read(h1_tcp_seq_num,1);
                     //here the tcp seq_num of each host is the first seq_num with adder header,
                     //so here should minus 1 to get the correct seq_num
-                    h1_tcp_seq_num=h1_tcp_seq_num+((ring_buffer_index-1)<<10);
+                    h1_tcp_seq_num=h1_tcp_seq_num+((relative_seq_num-1)<<10);
                     hdr.tcp.seq_num=h1_tcp_seq_num;
                     init_ack_num.read(hdr.tcp.ack_num,1);
                     host_tcp_port.read(hdr.tcp.srcPort,1);

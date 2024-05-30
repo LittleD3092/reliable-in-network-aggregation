@@ -60,6 +60,9 @@ class AdderSender:
         # Set MSS
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
+        # Delay in seconds
+        self.delay = 0.001
+
         while True:
             try:
                 self.socket.connect((self.dest_ip, self.dest_port))
@@ -94,7 +97,10 @@ class AdderSender:
             self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-            time.sleep(0.001)
+            time.sleep(self.delay)
+
+    def set_delay(self, delay):
+        self.delay = delay
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
@@ -280,8 +286,11 @@ class Tui:
             else:
                 self.print("Invalid command: " + command)
         elif self.prompt == "[SEND] (num)> ":
-            num_arr = parse_num(command)
-            self.agent.send(num_arr)
+            if command.split(' ')[0] == "delay":
+                self.agent.set_delay(float(command.split(' ')[1]))
+            else: # Send the number
+                num_arr = parse_num(command)
+                self.agent.send(num_arr)
         elif self.prompt == "[RECV]> ":
             # Add receiver command here if needed
             parsed_cmd = command.split(' ')
