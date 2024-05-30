@@ -32,7 +32,7 @@ import re
 from contextlib import contextmanager
 
 class AdderSender:
-    def __init__(self, tui, dest_ip = '10.0.1.3', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:03'):
+    def __init__(self, tui, dest_ip = '10.0.1.5', dest_port = 1234, src_port = 1234, dest_mac = '08:00:00:00:01:05'):
         self.src_port = src_port
         self.dest_mac = dest_mac
         self.dest_ip = dest_ip
@@ -59,6 +59,9 @@ class AdderSender:
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
         # Set MSS
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
+
+        # Delay in seconds
+        self.delay = 0.001
 
         while True:
             try:
@@ -94,14 +97,17 @@ class AdderSender:
             self.socket.send(payload)
             self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
             seq_num += 1
-            time.sleep(0.001)
+            time.sleep(self.delay)
+
+    def set_delay(self, delay):
+        self.delay = delay
 
     def run_thread(self):
         t = threading.Thread(target=self.listen_for_ack)
         t.start()
 
 class AdderReceiver:
-    def __init__(self, tui, server_ip = '10.0.1.3', server_port = 1234, filter='port 1234'):
+    def __init__(self, tui, server_ip = '10.0.1.5', server_port = 1234, filter='port 1234'):
         self.filter = filter
         self.port = server_port
         self.tui = tui
@@ -229,6 +235,8 @@ class Tui:
             '10.0.1.1': 'h1',
             '10.0.1.2': 'h2',
             '10.0.1.3': 'h3',
+            '10.0.1.4': 'h4',
+            '10.0.1.5': 'h5'            
         }
         ip = self.get_ip()
         if ip is None:
@@ -267,7 +275,7 @@ class Tui:
         if self.prompt == "[SEND/RECV?] (s/r)> ":
             if command == "s":
                 self.prompt = "[SEND] (num)> "
-                self.agent = AdderSender(self, '10.0.1.3')
+                self.agent = AdderSender(self, '10.0.1.5')
                 self.agent.run_thread()
                 time.sleep(0.05)
             elif command == "r":
@@ -278,8 +286,11 @@ class Tui:
             else:
                 self.print("Invalid command: " + command)
         elif self.prompt == "[SEND] (num)> ":
-            num_arr = parse_num(command)
-            self.agent.send(num_arr)
+            if command.split(' ')[0] == "delay":
+                self.agent.set_delay(float(command.split(' ')[1]))
+            else: # Send the number
+                num_arr = parse_num(command)
+                self.agent.send(num_arr)
         elif self.prompt == "[RECV]> ":
             # Add receiver command here if needed
             parsed_cmd = command.split(' ')
