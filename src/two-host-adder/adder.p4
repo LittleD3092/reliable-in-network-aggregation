@@ -34,7 +34,7 @@ const bit<9>  HOST_4_PORT         = 4;
 const bit<9>  DST_PORT            = 5;
 
 // buffer size
-const bit<32> BUFFER_SIZE         = 2048;
+const bit<32> BUFFER_SIZE         = 4;
 
 /*
         1               2               3               4
@@ -394,6 +394,13 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(BUFFER_SIZE) num_buffer;
     register<bit<4>> (BUFFER_SIZE) bit_set_buffer;
 
+    // three variables as pointer to the buffer
+    // min_index: point to the smallest seq that 
+    //            has not been acked
+    // max_index: point to the biggest seq
+    register<bit<32>>(1) min_index;
+    register<bit<32>>(1) max_index;
+
     action drop() {
         // drop the packet
         mark_to_drop(standard_metadata);
@@ -453,6 +460,17 @@ control MyIngress(inout headers hdr,
                     host_tcp_port.read(meta.h3_tcp_port,3);
                     host_tcp_port.read(meta.h4_tcp_port,4);
                     multicast();
+
+                    // increase min_index to the next seq_num
+                    bit<32> min_index_val;
+                    bit<32> min_seq;
+                    bit<32> diff;
+                    min_index.read(min_index_val, 0);
+                    seq_num_buffer.read(min_seq, min_index_val);
+                    diff = relative_seq_num - min_seq;
+                    if (diff > 0) {
+                        min_index.write(0, (min_index_val + diff + 1) % BUFFER_SIZE);
+                    }
                 }        
             }
         }
@@ -475,66 +493,120 @@ control MyIngress(inout headers hdr,
                 init_seq_num.read(seq_num,(bit<32>)in_port);
                 relative_seq_num=((hdr.tcp.seq_num-seq_num)>>10)+1;
             }
-            //todo the relative sequence num->ring buffer index
-
-            //number buffer operation
-            bit<32> num;  //current sum of this seq_num
-            bit<4> state; //current state of this seq_num
-            num_buffer.read(num,relative_seq_num);
-            bit_set_buffer.read(state,relative_seq_num);
-            if(in_port==1){
-                //mask is used to decide this host has already sent the result
-                bit<4> mask=0x1;  
-                //use & operation to decide whether this packet should be handled
-                if((state&mask)==0){
-                    num_buffer.write(relative_seq_num, num+hdr.adder.num);
-                    bit_set_buffer.write(relative_seq_num, state+1);
-                    seq_num_buffer.write(relative_seq_num, relative_seq_num);
-                }
+            
+            //the relative sequence num->ring buffer index
+            // "min_seq", "max_seq" are the corresponding value of 
+            // index "min_index", "max_index" in the ring buffer 
+            // "seq_num_buffer".
+            bit<32> min_index_val;
+            bit<32> max_index_val;
+            min_index.read(min_index_val, 0);
+            max_index.read(max_index_val, 0);
+            bit<32> min_seq;
+            bit<32> max_seq;
+            seq_num_buffer.read(min_seq, min_index_val);
+            if (max_index_val == 0) {
+                seq_num_buffer.read(max_seq, BUFFER_SIZE - 1);
+                max_seq = max_seq + 1;
             }
-            else if(in_port==2){
-                bit<4> mask=0x2;
-                if((state&mask)==0){
-                    num_buffer.write(relative_seq_num, num+hdr.adder.num);
-                    bit_set_buffer.write(relative_seq_num, state+2);
-                    seq_num_buffer.write(relative_seq_num, relative_seq_num);
-                }
+            else {
+                seq_num_buffer.read(max_seq, max_index_val - 1);
+                max_seq = max_seq + 1;
             }
-            else if(in_port==3){
-                bit<4> mask=0x4;
-                if((state&mask)==0){
-                    num_buffer.write(relative_seq_num, num+hdr.adder.num);
-                    bit_set_buffer.write(relative_seq_num, state+4);
-                    seq_num_buffer.write(relative_seq_num, relative_seq_num);
-                }
-            }
-            else if(in_port==4){
-                bit<4> mask=0x8;
-                if((state&mask)==0){
-                    num_buffer.write(relative_seq_num, num+hdr.adder.num);
-                    bit_set_buffer.write(relative_seq_num, state+8);
-                    seq_num_buffer.write(relative_seq_num, relative_seq_num);
-                }
-            }
-            bit_set_buffer.read(state,relative_seq_num);
-            //when state is 0xf(1111), it means all host has sent the result
-            //then we can send the result to the host
-            if(state==0xf){
-                bit<32> h1_tcp_seq_num;
-                init_seq_num.read(h1_tcp_seq_num,1);
-                //here the tcp seq_num of each host is the first seq_num with adder header,
-                //so here should minus 1 to get the correct seq_num
-                h1_tcp_seq_num=h1_tcp_seq_num+((relative_seq_num-1)<<10);
-                hdr.tcp.seq_num=h1_tcp_seq_num;
-                init_ack_num.read(hdr.tcp.ack_num,1);
-                host_tcp_port.read(hdr.tcp.srcPort,1);
-                num_buffer.read(hdr.adder.num,relative_seq_num);
-                hdr.ipv4.srcAddr=HOST_1_IP;
-                hdr.ethernet.srcAddr=HOST_1_ADDR;
-                standard_metadata.egress_spec=5;
-            }
-            else{
+            bit<32> ring_buffer_index = (relative_seq_num - 1) % BUFFER_SIZE;
+            // if the relative sequence number has already been acked
+            if (relative_seq_num < min_seq) {
                 drop();
+            } 
+            // else if the result is on the way to receiver
+            // or "relative_seq_num" is aggregating
+            else if (relative_seq_num >= min_seq && relative_seq_num < max_seq) {
+                //number buffer operation
+                bit<32> num;  //current sum of this seq_num
+                bit<4> state; //current state of this seq_num
+                num_buffer.read(num,ring_buffer_index);
+                bit_set_buffer.read(state,ring_buffer_index);
+                if(in_port==1){
+                    //mask is used to decide this host has already sent the result
+                    bit<4> mask=0x1;  
+                    //use & operation to decide whether this packet should be handled
+                    if((state&mask)==0){
+                        num_buffer.write(ring_buffer_index, num+hdr.adder.num);
+                        bit_set_buffer.write(ring_buffer_index, state+1);
+                        seq_num_buffer.write(ring_buffer_index, relative_seq_num);
+                    }
+                }
+                else if(in_port==2){
+                    bit<4> mask=0x2;
+                    if((state&mask)==0){
+                        num_buffer.write(ring_buffer_index, num+hdr.adder.num);
+                        bit_set_buffer.write(ring_buffer_index, state+2);
+                        seq_num_buffer.write(ring_buffer_index, relative_seq_num);
+                    }
+                }
+                else if(in_port==3){
+                    bit<4> mask=0x4;
+                    if((state&mask)==0){
+                        num_buffer.write(ring_buffer_index, num+hdr.adder.num);
+                        bit_set_buffer.write(ring_buffer_index, state+4);
+                        seq_num_buffer.write(ring_buffer_index, relative_seq_num);
+                    }
+                }
+                else if(in_port==4){
+                    bit<4> mask=0x8;
+                    if((state&mask)==0){
+                        num_buffer.write(ring_buffer_index, num+hdr.adder.num);
+                        bit_set_buffer.write(ring_buffer_index, state+8);
+                        seq_num_buffer.write(ring_buffer_index, relative_seq_num);
+                    }
+                }
+                bit_set_buffer.read(state,ring_buffer_index);
+                //when state is 0xf(1111), it means all host has sent the result
+                //then we can send the result to the host
+                if(state==0xf){
+                    bit<32> h1_tcp_seq_num;
+                    init_seq_num.read(h1_tcp_seq_num,1);
+                    //here the tcp seq_num of each host is the first seq_num with adder header,
+                    //so here should minus 1 to get the correct seq_num
+                    h1_tcp_seq_num=h1_tcp_seq_num+((ring_buffer_index-1)<<10);
+                    hdr.tcp.seq_num=h1_tcp_seq_num;
+                    init_ack_num.read(hdr.tcp.ack_num,1);
+                    host_tcp_port.read(hdr.tcp.srcPort,1);
+                    num_buffer.read(hdr.adder.num,ring_buffer_index);
+                    hdr.ipv4.srcAddr=HOST_1_IP;
+                    hdr.ethernet.srcAddr=HOST_1_ADDR;
+                    standard_metadata.egress_spec=5;
+
+                    // clear num_buffer and bit_set_buffer after done aggregation
+                    num_buffer.write(ring_buffer_index, 0);
+                    bit_set_buffer.write(ring_buffer_index, 0);
+                }
+                else{
+                    drop();
+                }
+            }
+            // else if the "relative_seq_num" has not been seen yet
+            else // relative_seq_num >= max_seq
+            {
+                // if the buffer is not full, update the buffer
+                if (max_seq <= relative_seq_num && relative_seq_num < BUFFER_SIZE + min_seq - 1) {
+                    seq_num_buffer.write(ring_buffer_index, relative_seq_num);
+                    num_buffer.write(ring_buffer_index, hdr.adder.num);
+                    // bit_set_buffer.write(ring_buffer_index, (bit<4>)(1) << (in_port - 1));
+                    if (in_port == 1) {
+                        bit_set_buffer.write(ring_buffer_index, 1);
+                    } else if (in_port == 2) {
+                        bit_set_buffer.write(ring_buffer_index, 2);
+                    } else if (in_port == 3) {
+                        bit_set_buffer.write(ring_buffer_index, 4);
+                    } else if (in_port == 4) {
+                        bit_set_buffer.write(ring_buffer_index, 8);
+                    }
+                    max_index.write(0, (ring_buffer_index + 1) % BUFFER_SIZE);
+                }
+                else {
+                    drop();
+                }
             }
         }
         else{
