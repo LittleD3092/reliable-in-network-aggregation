@@ -403,6 +403,7 @@ control MyIngress(inout headers hdr,
 
     // debug register
     register<bit<32>>(1) debug_seq_num;
+    register<bit<32>>(1) debug_relative_seq_num;
 
     action drop() {
         // drop the packet
@@ -434,7 +435,9 @@ control MyIngress(inout headers hdr,
     apply {
         // read debug register
         bit<32> debug_seq_num_val;
+        bit<32> debug_relative_seq_num_val;
         debug_seq_num.read(debug_seq_num_val, 0);
+        debug_relative_seq_num.read(debug_relative_seq_num_val, 0);
 
         //ack part, cna only be triggered when 4 host all initialized 
         //metadata is used to store the tcp inform of each host
@@ -478,8 +481,9 @@ control MyIngress(inout headers hdr,
                     bit<32> diff;
                     min_index.read(min_index_val, 0);
                     seq_num_buffer.read(min_seq, min_index_val);
+                    debug_relative_seq_num.write(0, relative_seq_num);
                     diff = relative_seq_num - min_seq;
-                    if (diff >= 0) {
+                    if (relative_seq_num >= min_seq && diff < BUFFER_SIZE) {
                         min_index.write(0, (min_index_val + diff + 1) % BUFFER_SIZE);
                     }
                 }        
@@ -506,6 +510,7 @@ control MyIngress(inout headers hdr,
 
                 // debug
                 debug_seq_num.write(0, hdr.tcp.seq_num - seq_num);
+                debug_relative_seq_num.write(0, relative_seq_num);
             }
             
             //the relative sequence num->ring buffer index
