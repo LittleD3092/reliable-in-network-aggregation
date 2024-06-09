@@ -55,8 +55,8 @@ class AdderSender:
         # Disable Nagle's algorithm
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # Set the window size
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+        # self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+        # self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
         # Set MSS
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
@@ -148,8 +148,8 @@ class AdderReceiver:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             
             # Set the window size
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+            # s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+            # s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
 
             # Set MSS
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)

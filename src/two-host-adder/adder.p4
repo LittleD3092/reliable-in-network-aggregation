@@ -401,6 +401,10 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(1) min_index;
     register<bit<32>>(1) max_index;
 
+    // debug register
+    register<bit<32>>(1) debug_seq_num;
+    register<bit<32>>(1) debug_relative_seq_num;
+
     action drop() {
         // drop the packet
         mark_to_drop(standard_metadata);
@@ -429,6 +433,12 @@ control MyIngress(inout headers hdr,
         default_action = multicast;
     }
     apply {
+        // read debug register
+        bit<32> debug_seq_num_val;
+        bit<32> debug_relative_seq_num_val;
+        debug_seq_num.read(debug_seq_num_val, 0);
+        debug_relative_seq_num.read(debug_relative_seq_num_val, 0);
+
         //ack part, cna only be triggered when 4 host all initialized 
         //metadata is used to store the tcp inform of each host
         if(standard_metadata.ingress_port==DST_PORT && hdr.tcp.isValid()){
@@ -443,6 +453,10 @@ control MyIngress(inout headers hdr,
             if(h1_valid==1 && h2_valid==1 && h3_valid==1 && h4_valid==1){
                 bit<32> ini_seq_num;
                 init_seq_num.read(ini_seq_num,1);
+
+                // debug
+                debug_seq_num.write(0, hdr.tcp.ack_num - ini_seq_num);
+
                 bit<32> relative_seq_num=((hdr.tcp.ack_num-ini_seq_num)>>10);
                 if(relative_seq_num>0){
                     meta.ack_valid=1;
@@ -467,8 +481,9 @@ control MyIngress(inout headers hdr,
                     bit<32> diff;
                     min_index.read(min_index_val, 0);
                     seq_num_buffer.read(min_seq, min_index_val);
+                    debug_relative_seq_num.write(0, relative_seq_num);
                     diff = relative_seq_num - min_seq;
-                    if (diff > 0) {
+                    if (relative_seq_num >= min_seq && diff < BUFFER_SIZE) {
                         min_index.write(0, (min_index_val + diff + 1) % BUFFER_SIZE);
                     }
                 }        
@@ -492,6 +507,10 @@ control MyIngress(inout headers hdr,
             else{
                 init_seq_num.read(seq_num,(bit<32>)in_port);
                 relative_seq_num=((hdr.tcp.seq_num-seq_num)>>10)+1;
+
+                // debug
+                debug_seq_num.write(0, hdr.tcp.seq_num - seq_num);
+                debug_relative_seq_num.write(0, relative_seq_num);
             }
             
             //the relative sequence num->ring buffer index
@@ -589,7 +608,7 @@ control MyIngress(inout headers hdr,
             else // relative_seq_num >= max_seq
             {
                 // if the buffer is not full, update the buffer
-                if (max_seq <= relative_seq_num && relative_seq_num < BUFFER_SIZE + min_seq - 1) {
+                if (max_seq <= relative_seq_num && relative_seq_num < BUFFER_SIZE + min_seq - 1 || max_index_val == min_index_val) {
                     seq_num_buffer.write(ring_buffer_index, relative_seq_num);
                     num_buffer.write(ring_buffer_index, hdr.adder.num);
                     // bit_set_buffer.write(ring_buffer_index, (bit<4>)(1) << (in_port - 1));
