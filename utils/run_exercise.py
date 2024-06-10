@@ -360,6 +360,26 @@ class ExerciseRunner:
             print(' for example run:  cat %s/s1-p4runtime-requests.txt' % self.log_dir)
             print('')
 
+        # # run iperf
+        h1 = self.net.get('h1')
+        h2 = self.net.get('h2')
+        h3 = self.net.get('h3')
+        h4 = self.net.get('h4')
+        h5 = self.net.get('h5')
+        print("Starting iperf server on h5")
+        h1.cmd('sysctl -w net.ipv4.tcp_timestamps=0 &&')
+        h2.cmd('sysctl -w net.ipv4.tcp_timestamps=0 &&')
+        h3.cmd('sysctl -w net.ipv4.tcp_timestamps=0 &&')
+        h4.cmd('sysctl -w net.ipv4.tcp_timestamps=0 &&')
+        h5.cmd('sysctl -w net.ipv4.tcp_timestamps=0 &&')
+
+        h5.cmd('iperf -s -p 1234 -w 512k &')
+        h1.cmd('iperf -c 10.0.1.5 -p 1234 -M 1024 -n 2048000 -w 64512 -N &')
+        h2.cmd('iperf -c 10.0.1.5 -p 1234 -M 1024 -n 2048000 -w 64512 -N &')
+        h3.cmd('iperf -c 10.0.1.5 -p 1234 -M 1024 -n 2048000 -w 64512 -N &')
+        h4.cmd('iperf -c 10.0.1.5 -p 1234 -M 1024 -n 2048000 -w 64512 -N &')
+        
+
         CLI(self.net)
 
 

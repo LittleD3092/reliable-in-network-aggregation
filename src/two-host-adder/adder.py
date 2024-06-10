@@ -20,9 +20,9 @@ from scapy.all import (
     send,
     sendp,
     sniff,
-    bind_layers,
-    socket
+    bind_layers
 )
+import socket
 
 import sys
 import os
@@ -55,8 +55,8 @@ class AdderSender:
         # Disable Nagle's algorithm
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # Set the window size
-        # self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
-        # self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
         # Set MSS
         self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
 
@@ -92,11 +92,21 @@ class AdderSender:
             seq_num = self.seq_num
             self.seq_num += 1
 
-        for num in num_arr:
-            payload = struct.pack('>I', num) + b'\x00' * (self.payload_size - 4)
+        # for num in num_arr:
+        #     payload = struct.pack('>I', num) + b'\x00' * (self.payload_size - 4)
+        #     self.socket.send(payload)
+        #     self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
+        #     seq_num += 1
+        #     time.sleep(self.delay)
+
+        # pack 50 numbers into a single packet
+        for i in range(0, len(num_arr), 50):
+            payload = b''
+            for j in range(i, min(i + 50, len(num_arr))):
+                payload += struct.pack('>I', num_arr[j]) + b'\x00' * (self.payload_size - 4)
             self.socket.send(payload)
-            self.tui.print("[SEND] seq_num: " + str(seq_num) + " num: " + str(num))
-            seq_num += 1
+            self.tui.print("[SEND] seq_num: " + str(seq_num) + "~" + str(seq_num + 49) + " num: " + str(num_arr[i:i+3]) + "...")
+            seq_num += 50
             time.sleep(self.delay)
 
     def set_delay(self, delay):
@@ -148,8 +158,8 @@ class AdderReceiver:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             
             # Set the window size
-            # s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
-            # s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.window_size)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.window_size)
 
             # Set MSS
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, self.mss)
