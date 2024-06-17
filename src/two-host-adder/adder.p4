@@ -393,6 +393,7 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(BUFFER_SIZE) seq_num_buffer;
     register<bit<32>>(BUFFER_SIZE) num_buffer;
     register<bit<4>> (BUFFER_SIZE) bit_set_buffer;
+    register<bit<32>>(BUFFER_SIZE) test_hash_seq;
 
     // three variables as pointer to the buffer
     // min_index: point to the smallest seq that 
@@ -409,6 +410,7 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(1) consecutive_buffer_full;
     register<bit<32>>(1) debug_increment_min_index_from;
     register<bit<32>>(1) debug_increment_min_index_to;
+    register<bit<32>>(1) debug_hash_collision_seq;
     register<bit<9>>(1) debug_in_port;
 
     action drop() {
@@ -445,6 +447,7 @@ control MyIngress(inout headers hdr,
         bit<32> debug_ack_num_val;
         bit<32> debug_increment_min_index_from_val;
         bit<32> debug_increment_min_index_to_val;
+        bit<32> debug_hash_collision_seq_val;
         bit<9> debug_in_port_val;
         debug_seq_num.read(debug_seq_num_val, 0);
         debug_relative_seq_num.read(debug_relative_seq_num_val, 0);
@@ -452,6 +455,7 @@ control MyIngress(inout headers hdr,
         debug_increment_min_index_from.read(debug_increment_min_index_from_val, 0);
         debug_increment_min_index_to.read(debug_increment_min_index_to_val, 0);
         debug_in_port.read(debug_in_port_val, 0);
+        debug_hash_collision_seq.read(debug_hash_collision_seq_val, 0);
 
         //ack part, cna only be triggered when 4 host all initialized 
         //metadata is used to store the tcp inform of each host
@@ -571,6 +575,53 @@ control MyIngress(inout headers hdr,
             seq_num_buffer.read(min_seq, min_index_val);
             seq_num_buffer.read(max_seq, max_index_val);
             bit<32> ring_buffer_index = (relative_seq_num - 1) % BUFFER_SIZE;
+
+            // test hash
+            // the hashed indexes have different seeds
+            bit<32> first_hash_index;
+            bit<32> second_hash_index;
+            bit<32> third_hash_index;
+            hash(first_hash_index, HashAlgorithm.random, 32w0, {relative_seq_num}, BUFFER_SIZE);
+            hash(second_hash_index, HashAlgorithm.random, 32w1, {relative_seq_num}, BUFFER_SIZE);
+            hash(third_hash_index, HashAlgorithm.random, 32w2, {relative_seq_num}, BUFFER_SIZE);
+            bit<32> first_hash_seq_val;
+            bit<32> second_hash_seq_val;
+            bit<32> third_hash_seq_val;
+            test_hash_seq.read(first_hash_seq_val, first_hash_index);
+            test_hash_seq.read(second_hash_seq_val, second_hash_index);
+            test_hash_seq.read(third_hash_seq_val, third_hash_index);
+            // find hashed result
+            if (first_hash_seq_val == relative_seq_num) {
+                // aggregate at first_hash_index
+                test_hash_seq.write(first_hash_index, relative_seq_num);
+            }
+            else if (second_hash_seq_val == relative_seq_num) {
+                // aggregate at second_hash_index
+                test_hash_seq.write(second_hash_index, relative_seq_num);
+            }
+            else if (third_hash_seq_val == relative_seq_num) {
+                // aggregate at third_hash_index
+                test_hash_seq.write(third_hash_index, relative_seq_num);
+            }
+            // new seq_num
+            else if (first_hash_seq_val < min_seq || first_hash_seq_val == 0) {
+                // aggregate at first_hash_index
+                test_hash_seq.write(first_hash_index, relative_seq_num);
+            }
+            else if (second_hash_seq_val < min_seq || second_hash_seq_val == 0) {
+                // aggregate at second_hash_index
+                test_hash_seq.write(second_hash_index, relative_seq_num);
+            }
+            else if (third_hash_seq_val < min_seq || third_hash_seq_val == 0) {
+                // aggregate at third_hash_index
+                test_hash_seq.write(third_hash_index, relative_seq_num);
+            }
+            // hash collision
+            else {
+                // debug
+                debug_hash_collision_seq.write(0, relative_seq_num);
+            }
+
             // if the relative sequence number has already been acked
             if (relative_seq_num < min_seq) {
                 drop();
