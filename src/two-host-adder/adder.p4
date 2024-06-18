@@ -581,9 +581,9 @@ control MyIngress(inout headers hdr,
             bit<32> first_hash_index;
             bit<32> second_hash_index;
             bit<32> third_hash_index;
-            hash(first_hash_index, HashAlgorithm.random, 32w0, {relative_seq_num}, BUFFER_SIZE);
-            hash(second_hash_index, HashAlgorithm.random, 32w1, {relative_seq_num}, BUFFER_SIZE);
-            hash(third_hash_index, HashAlgorithm.random, 32w2, {relative_seq_num}, BUFFER_SIZE);
+            hash(first_hash_index, HashAlgorithm.csum16, 32w0, {relative_seq_num}, BUFFER_SIZE - 1);
+            hash(second_hash_index, HashAlgorithm.csum16, 32w1, {relative_seq_num}, BUFFER_SIZE - 1);
+            hash(third_hash_index, HashAlgorithm.csum16, 32w2, {relative_seq_num}, BUFFER_SIZE - 1);
             bit<32> first_hash_seq_val;
             bit<32> second_hash_seq_val;
             bit<32> third_hash_seq_val;
