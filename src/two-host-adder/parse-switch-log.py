@@ -1,5 +1,7 @@
 from tqdm import tqdm
 
+BUFFER_SIZE = 256
+
 # Count the number of lines in the source file
 with open('logs/s1.log', 'r') as source_file:
     total_lines = sum(1 for line in source_file)
@@ -69,4 +71,4 @@ with open('logs/s1.log', 'r') as source_file:
                 seq_num = int(line.split(' ')[-1])
                 if seq_num not in seq_num_in_record:
                     seq_num_in_record.add(seq_num)
-                    destination_file.write(f'| {seq_num} | {first_hash_seq}, {second_hash_seq}, {third_hash_seq} | {128 - (max_seq - min_seq + 1)} | {max_seq - min_seq + 1} |\n')
+                    destination_file.write(f'| {seq_num} | {first_hash_seq}, {second_hash_seq}, {third_hash_seq} | {BUFFER_SIZE - (max_seq - min_seq + 1)} | {max_seq - min_seq + 1} |\n')
