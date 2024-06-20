@@ -35,6 +35,7 @@ const bit<9>  DST_PORT            = 5;
 
 // buffer size
 const bit<32> BUFFER_SIZE         = 256;
+const bit<32> HASH_BUFFER_SIZE    = 128;
 
 /*
         1               2               3               4
@@ -393,7 +394,8 @@ control MyIngress(inout headers hdr,
     register<bit<32>>(BUFFER_SIZE) seq_num_buffer;
     register<bit<32>>(BUFFER_SIZE) num_buffer;
     register<bit<4>> (BUFFER_SIZE) bit_set_buffer;
-    register<bit<32>>(BUFFER_SIZE) test_hash_seq;
+    register<bit<32>>(HASH_BUFFER_SIZE) test_hash_seq_1;
+    register<bit<32>>(HASH_BUFFER_SIZE) test_hash_seq_2;
 
     // three variables as pointer to the buffer
     // min_index: point to the smallest seq that 
@@ -578,43 +580,29 @@ control MyIngress(inout headers hdr,
 
             // test hash
             // the hashed indexes have different seeds
-            bit<32> first_hash_index;
-            bit<32> second_hash_index;
-            bit<32> third_hash_index;
-            hash(first_hash_index, HashAlgorithm.crc32, 32w0, {relative_seq_num}, BUFFER_SIZE - 1);
-            hash(second_hash_index, HashAlgorithm.csum16, 32w1, {relative_seq_num + first_hash_index}, BUFFER_SIZE - 1);
-            hash(third_hash_index, HashAlgorithm.crc32, 32w2, {first_hash_index + second_hash_index}, BUFFER_SIZE - 1);
-            bit<32> first_hash_seq_val;
-            bit<32> second_hash_seq_val;
-            bit<32> third_hash_seq_val;
-            test_hash_seq.read(first_hash_seq_val, first_hash_index);
-            test_hash_seq.read(second_hash_seq_val, second_hash_index);
-            test_hash_seq.read(third_hash_seq_val, third_hash_index);
+            bit<32> hash_index;
+            hash(hash_index, HashAlgorithm.crc32, 32w0, {relative_seq_num}, HASH_BUFFER_SIZE - 1);
+            bit<32> hash_seq_val_1;
+            bit<32> hash_seq_val_2;
+            test_hash_seq_1.read(hash_seq_val_1, hash_index);
+            test_hash_seq_2.read(hash_seq_val_2, hash_index);
             // find hashed result
-            if (first_hash_seq_val == relative_seq_num) {
+            if (hash_seq_val_1 == relative_seq_num) {
                 // aggregate at first_hash_index
-                test_hash_seq.write(first_hash_index, relative_seq_num);
+                test_hash_seq_1.write(hash_index, relative_seq_num);
             }
-            else if (second_hash_seq_val == relative_seq_num) {
+            else if (hash_seq_val_2 == relative_seq_num) {
                 // aggregate at second_hash_index
-                test_hash_seq.write(second_hash_index, relative_seq_num);
-            }
-            else if (third_hash_seq_val == relative_seq_num) {
-                // aggregate at third_hash_index
-                test_hash_seq.write(third_hash_index, relative_seq_num);
+                test_hash_seq_2.write(hash_index, relative_seq_num);
             }
             // new seq_num
-            else if (first_hash_seq_val < min_seq || first_hash_seq_val == 0) {
+            else if (hash_seq_val_1 < min_seq || hash_seq_val_1 == 0) {
                 // aggregate at first_hash_index
-                test_hash_seq.write(first_hash_index, relative_seq_num);
+                test_hash_seq_1.write(hash_index, relative_seq_num);
             }
-            else if (second_hash_seq_val < min_seq || second_hash_seq_val == 0) {
+            else if (hash_seq_val_2 < min_seq || hash_seq_val_2 == 0) {
                 // aggregate at second_hash_index
-                test_hash_seq.write(second_hash_index, relative_seq_num);
-            }
-            else if (third_hash_seq_val < min_seq || third_hash_seq_val == 0) {
-                // aggregate at third_hash_index
-                test_hash_seq.write(third_hash_index, relative_seq_num);
+                test_hash_seq_2.write(hash_index, relative_seq_num);
             }
             // hash collision
             else {

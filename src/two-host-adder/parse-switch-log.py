@@ -1,6 +1,6 @@
 from tqdm import tqdm
 
-BUFFER_SIZE = 256
+BUFFER_SIZE = 128
 
 # Count the number of lines in the source file
 with open('logs/s1.log', 'r') as source_file:
@@ -45,30 +45,38 @@ with open('logs/s1.log', 'r') as source_file:
                     max_seq = int(line.split(' ')[-1])
                     max_index = int(line.split(' ')[-4])
 
-            elif 'Primitive test_hash_seq.read(first_hash_seq_val, first_hash_index)' in line:
-                hash_level = 1
+            # elif 'Primitive test_hash_seq.read(first_hash_seq_val, first_hash_index)' in line:
+            #     hash_level = 1
 
-            elif 'Primitive test_hash_seq.read(second_hash_seq_val, second_hash_index)' in line:
-                hash_level = 2
+            # elif 'Primitive test_hash_seq.read(second_hash_seq_val, second_hash_index)' in line:
+            #     hash_level = 2
 
-            elif 'Primitive test_hash_seq.read(third_hash_seq_val, third_hash_index)' in line:
-                hash_level = 3
+            # elif 'Primitive test_hash_seq.read(third_hash_seq_val, third_hash_index)' in line:
+            #     hash_level = 3
 
-            elif 'Read register \'MyIngress.test_hash_seq\' at' in line:
-                if hash_level == 1:
-                    first_hash_seq = int(line.split(' ')[-1])
-                    first_hash_index = int(line.split(' ')[-4])
+            # elif 'Read register \'MyIngress.test_hash_seq\' at' in line:
+            #     if hash_level == 1:
+            #         first_hash_seq = int(line.split(' ')[-1])
+            #         first_hash_index = int(line.split(' ')[-4])
 
-                elif hash_level == 2:
-                    second_hash_seq = int(line.split(' ')[-1])
-                    second_hash_index = int(line.split(' ')[-4])
+            #     elif hash_level == 2:
+            #         second_hash_seq = int(line.split(' ')[-1])
+            #         second_hash_index = int(line.split(' ')[-4])
 
-                elif hash_level == 3:
-                    third_hash_seq = int(line.split(' ')[-1])
-                    third_hash_index = int(line.split(' ')[-4])
+            #     elif hash_level == 3:
+            #         third_hash_seq = int(line.split(' ')[-1])
+            #         third_hash_index = int(line.split(' ')[-4])
+
+            elif 'Read register \'MyIngress.test_hash_seq_1\' at' in line:
+                first_hash_seq = int(line.split(' ')[-1])
+                first_hash_index = int(line.split(' ')[-4])
+
+            elif 'Read register \'MyIngress.test_hash_seq_2\' at' in line:
+                second_hash_seq = int(line.split(' ')[-1])
+                second_hash_index = int(line.split(' ')[-4])
 
             elif 'Wrote register \'MyIngress.debug_hash_collision_seq\' at index' in line:
                 seq_num = int(line.split(' ')[-1])
                 if seq_num not in seq_num_in_record:
                     seq_num_in_record.add(seq_num)
-                    destination_file.write(f'| {seq_num} | {first_hash_seq}, {second_hash_seq}, {third_hash_seq} | {BUFFER_SIZE - (max_seq - min_seq + 1)} | {max_seq - min_seq + 1} |\n')
+                    destination_file.write(f'| {seq_num} | {first_hash_seq}, {second_hash_seq} | {BUFFER_SIZE - (max_seq - min_seq + 1)} | {max_seq - min_seq + 1} |\n')
